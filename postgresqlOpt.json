@@ -1,0 +1,6 @@
+{
+    "host":"pgsql.mdb.bbdomain.org",
+    "dbname":"mdb",
+    "user":"readonly",
+    "password":"g!7vJx-QHz"
+}

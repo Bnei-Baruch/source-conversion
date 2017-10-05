@@ -1,0 +1,85 @@
+Dependencies:
+
+1) python 3.x (*last version*, tested with 3.6.2)
+2) Python libs (dependencies)
+
+    pip install -U pip # make sure to have an up-to-date pip
+    pip install pypandoc  (https://pypi.python.org/pypi/pypandoc)
+    pip install pytidylib  (http://countergram.com/open-source/pytidylib/docs/index.html)
+    pip install psycopg2 (http://initd.org/psycopg/download/)
+
+3) Tools:
+
+    soffice (libre office, *last version*, tested with 'LibreOffice 5.3.6.1 30m0(Build:1)') - doc -> docx converter (and many other formats)
+    pandoc (https://pandoc.org/, *last version*, tested with 'pandoc 1.19.2.1') - docx -> html converter
+    tidy (http://www.html-tidy.org/, *last version*, tested with 'HTML Tidy for Linux version 5.4.0') - html cleaner
+
+3) Files Description:
+
+README
+langmap.json - map from 3 letter lang -> 2 letter lang (and show which languages we support)
+tidy_options.conf - options for tidy
+
+fileUtils.py
+conversionFunctions.py      - contain calls for soffice (doc->docx) and pandoc + tidy (docx-> html-> cleaned html)
+multiprocessing_logging.py  - logging for multiprocessing (for future usage)
+
+copyFilesByPatternsWIthDirectoryStructurePreserve.py    - copy stage
+organizeOriginalDocsByMBId.py                           - analyze + organize stage
+convertToHtml.py                                        - convert stage script
+
+
+!!!!!!!!!Every module support -h option (to get args description)!!!!!!!!!
+
+**********************************************
+
+./copyFilesByPatternsWIthDirectoryStructurePreserve.py -h
+  
+
+
+
+
+Example:
+./copyFilesByPatternsWIthDirectoryStructurePreserve.py /mnt/Mdb_Sources/____beavoda /run/media/dalegur/DATA/Documents/BB_MDB/Mapping/docs_copy/____beavoda
+
+**********************************************
+
+./organizeOriginalDocsByMBId.py -h
+
+
+Script creates 'analysis' folder (where script is located) and copy result of analysis there
+    analyze_2017-10-03_15:16:27.386195.csv
+    docsSkippedByFileName_2017-10-03_15:16:27.386195.txt
+    fileNamesRecognitionProblems_2017-10-03_15:16:27.386195.txt
+    summary_2017-10-03_15:16:27.386195.txt
+    validDocsFiles_2017-10-03_15:16:27.386195.txt
+    validSources_2017-10-03_15:16:27.386195.txt
+    warnings_2017-10-03_15:16:27.386195.txt
+
+Example (started from script's location):
+./organizeOriginalDocsByMBId.py /run/media/dalegur/DATA/Documents/BB_MDB/Mapping/docs_copy/ /run/media/dalegur/DATA/Documents/BB_MDB/Mapping/Mapping_01.10.2017.xlsx -c ./validdocs
+
+   
+**********************************************
+
+./convertToHtml.py -h
+
+usage: convertToHtml.py [-h] rootfolder destfolder
+
+Convertion doc -> docx -> cleaned html + mbId -> uid directory structure.
+Working with a copy of source folder
+
+positional arguments:
+  rootfolder  Root folder (copy to destfolder and then copy_folder is
+              processed)
+  destfolder  Dest folder
+
+optional arguments:
+  -h, --help  show this help message and exit
+
+Script creates 'converting' folder (where script is located) with convertion errors file
+    unrecognizedFolderNames.txt         - folders which can not be mapped (mbid -> uid)
+    fileNamesWithUnrecognizedLangs.txt  - files where lang not recognized/supported (see langMap.json file)
+
+Example (from script location)
+./convertToHtml.py ./validdocs ./converted
