@@ -18,7 +18,7 @@ def convertFromDocToDocx(workingPath, sofficeErrors):
     stdout, stderr = p.communicate()
     print("\t{}".format(stdout))
     if(len(stderr)>0):
-        sofficeErrors.append((cmd, workingPath, stderr))
+        sofficeErrors.put((cmd, workingPath, str(stderr)))
     print("\t\tDone converting from doc to docx. Working path: {}".format(workingPath))
     return
 
@@ -32,7 +32,7 @@ def convertFromDocxToHtml(sourcepath, destpath, tidyOptions, tidyErrors):
         htmlFileContent = myfile.read().replace('\n', '')
     markup, errors = tidylib.tidy_document(htmlFileContent, tidyOptions)
     if(len(errors)>0):
-        tidyErrors.append((destpath, errors))
+        tidyErrors.put((destpath, str(errors)))
     with open(destpath, 'w') as myfile:
         myfile.write(markup)
     print("\t\tDone to tidy html file '{}'. Errors: {}".format(destpath, errors))

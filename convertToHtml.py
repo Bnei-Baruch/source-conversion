@@ -78,7 +78,7 @@ def main(args):
 
     # working on copy (!!!clear previous one!!!)
     convertedFolder = os.path.join(destFolderPath, 'converted')
-    if os.path.exists(convertedFolder):
+    if (os.path.exists(convertedFolder)):
         shutil.rmtree(convertedFolder)
     shutil.copytree(srcFolderPath, convertedFolder)
     srcFolderPath = convertedFolder
@@ -109,8 +109,8 @@ def main(args):
     unrecognizedFolderNames = []
     sourcesCounter = 0
 
-    tidyErrors = []
-    sofficeErrors = []
+    tidyErrors = multiprocessing.Manager().Queue()
+    sofficeErrors = multiprocessing.Manager().Queue()
 
     try:
         allSourcesFolders = os.listdir(srcFolderPath)
@@ -118,14 +118,14 @@ def main(args):
             workingPath = normalizeFilePath(os.path.join(srcFolderPath, dirName))
             if (os.path.isdir(workingPath)):  # self check
                 sourcesCounter += 1
-                print("Converting #{}(#{}) folder (mbId='{}')".format(sourcesCounter, len(allSourcesFolders), dirName))
+                print("Converting #{}({}) folder (mbId='{}')".format(sourcesCounter, len(allSourcesFolders), dirName))
                 for filename in fnmatch.filter(os.listdir(workingPath), "*.doc"):
                     if (os.path.exists(os.path.join(workingPath, os.path.splitext(filename)[0] + '.docx'))):
                         continue
                     else:
                         # convertFromDocToDocx(workingPath, errors)
                         convertFromDocToDocxTasks.append((workingPath, sofficeErrors))
-                        break;
+                        break
                 if (len(convertFromDocToDocxTasks) > 0):
                     results = [sofficepool.apply_async(conversionFunctions.convertFromDocToDocx, t) for t in convertFromDocToDocxTasks]
                     for result in results:
@@ -153,7 +153,7 @@ def main(args):
                     # return (lang, newDocFormat)
                     lang2letter = langMap.get(getLangFromFileName(filename)[0].upper(), False)
                     if (not lang2letter):
-                        print("Skip filename with unrecognized lang: {}".format(filename))
+                        print("\tSkip filename with unrecognized lang: {}".format(filename))
                         fileNamesWithUnrecognizedLangs.append((workingPath + os.path.sep + filename))
                         continue
                     if (lang2letter not in langToDocsMap):
@@ -167,15 +167,16 @@ def main(args):
                 try:
                     mbId = int(dirName)
                 except ValueError as err:
-                    print("Unrecognized mbId: {}".format(dirName))
+                    print("\tUnrecognized mbId: {}".format(dirName))
                     unrecognizedFolderNames.append(dirName)
                     continue
 
                 uid = idUidMap.get(mbId)
                 if (not uid):
-                    print("Unrecognized mbId: {}".format(dirName))
+                    print("\tUnrecognized mbId: {}".format(dirName))
                     unrecognizedFolderNames.append(mbId)
                 else:
+                    print("\tRename {}\n\tto {}".format(srcFolderPath + os.path.sep + dirName, srcFolderPath + os.path.sep + uid))
                     os.rename(srcFolderPath + os.path.sep + dirName, srcFolderPath + os.path.sep + uid)
 
         currentDate = str(datetime.datetime.now()).replace(' ', '_');
@@ -184,8 +185,18 @@ def main(args):
         printIterableToFile(os.path.join(destFolderPath, convertingSummaryFolder, 'fileNamesWithUnrecognizedLangs_{}.txt'.format(currentDate)), fileNamesWithUnrecognizedLangs)
         printIterableToFile(os.path.join(destFolderPath, convertingSummaryFolder, 'unrecognizedFolderNames_{}.txt'.format(currentDate)), unrecognizedFolderNames)
         printIterableToFile(os.path.join(destFolderPath, convertingSummaryFolder, 'idUidMap_{}.txt'.format(currentDate)), idUidMap)
-        printIterableToFile(os.path.join(destFolderPath, convertingSummaryFolder, 'tidyErrors_{}.txt'.format(currentDate)), tidyErrors)
-        printIterableToFile(os.path.join(destFolderPath, convertingSummaryFolder, 'sofficeErrors_{}.txt'.format(currentDate)), sofficeErrors)
+        #to end "iter" call below
+        tidyErrors.put(None)
+        sofficeErrors.put(None)
+
+        def multiprocessingQueueToList(queue):
+            listFromQueue = []
+            for i in iter(queue.get, None):
+                listFromQueue.append(i)
+            return listFromQueue
+
+        printIterableToFile(os.path.join(destFolderPath, convertingSummaryFolder, 'tidyErrors_{}.txt'.format(currentDate)), [("workingPath", "errors")] + multiprocessingQueueToList(tidyErrors))
+        printIterableToFile(os.path.join(destFolderPath, convertingSummaryFolder, 'sofficeErrors_{}.txt'.format(currentDate)), [("cmd", "workingPath", "errors")] + multiprocessingQueueToList(sofficeErrors))
     except OSError as err:
         print(err)
 
