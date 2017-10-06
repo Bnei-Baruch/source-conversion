@@ -17,13 +17,13 @@ import pyexcel as p
 
 
 def main(args):
-    parser = argparse.ArgumentParser(description='Analysis and docs organizing')
+    parser = argparse.ArgumentParser(description='Analysis and docs organizing', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('srcFolder', action="store", help="Full path to sources folder")
-    parser.add_argument('-mappingfilepath', action="store", help="Full path to Roza's mapping.xslx file")
-    parser.add_argument('-p', action="append", dest='patterns', default=['*.doc', '*.docx'], help="Extension patterns for source docs (default *.doc, *.docx)")
+    parser.add_argument('-mappingfilepath', action="store", default="./mapping.xlsx", help="Full path to Roza's mapping.xslx file")
+    parser.add_argument('-p', action="append", dest='patterns', default=['*.doc', '*.docx'], help="Extension patterns for source docs")
     parser.add_argument('-destFolderPath', action="store", default=".", help="Path where organized and amalysis folders will be")
-    parser.add_argument('-langMapFilePath', action="store", default=False, help="Lang3letter -> Lang2letter json map")
-    parser.add_argument('--cleanOrganizedBefore', action="store_true", default=False, help="")
+    parser.add_argument('-langMapFilePath', action="store", default="./langMap.json", help="Lang3letter -> Lang2letter json map")
+    parser.add_argument('--cleanOrganizedBefore', action="store_true", default=False, help="Clean destFolderPath/organized before")
     results = parser.parse_args(args)
 
     srcFolder = normalizeFilePath(results.srcFolder)
@@ -39,14 +39,17 @@ def main(args):
     # result of analisys folder
     analysisSummaryFolder = os.path.join(destFolderPath, 'analysisSummary')
     os.makedirs(analysisSummaryFolder, exist_ok=True)
-    organizedFolder = os.path.join(destFolderPath, 'organized')
-    os.makedirs(organizedFolder, exist_ok=True)
+    organizedFolderPath = os.path.join(destFolderPath, 'organized')
+    os.makedirs(organizedFolderPath, exist_ok=True)
+
+    if(cleanOrganizedBefore and os.path.exists(organizedFolderPath)):
+        print("Clean folder {}".format(organizedFolderPath))
+        shutil.rmtree(organizedFolderPath)
+        print("Folder was cleaned".format(organizedFolderPath))
 
     # get data from mapping file, skip headers
     sheet = p.get_sheet(file_name=mappingFilePath, name_columns_by_row=0)
 
-    if(cleanOrganizedBefore):
-        shutil.rmtree(organizedFolder)
 
     patternsToDocCount = {}
     for pattern in patterns:
@@ -249,7 +252,7 @@ def main(args):
                             originalFileNamesRecognitionProblems.append((mbId, lang, type, analyzedFileRelativePath, "Multiple 'original' files for lang (DUPLICATED)"))
 
             if (not destFolderPath == "" and len(originalSourceDocsByLang.keys())>0):
-                folderToCopy = os.path.join(organizedFolder, mbId)
+                folderToCopy = os.path.join(organizedFolderPath, mbId)
                 os.makedirs(folderToCopy, exist_ok=True)
                 for docLang in list(originalSourceDocsByLang.keys()):
                     docCounter, sourcePhysicallyPath, newDoc = originalSourceDocsByLang[docLang]
@@ -314,8 +317,8 @@ def main(args):
         spreadsheet.writerow([int(validSource[0])] + sourceRow)
 
     printToFileAndConsole(os.path.join(analysisSummaryFolder, 'summary_{}.txt'.format(currentDate)), linesOfSummaryToPrint)
-    printIterableToFile(os.path.join(analysisSummaryFolder, 'validDocsFiles_{}.txt'.format(currentDate)), [("mbId", "lang", "type", "fullpath", "sha1")] + validDocsFiles)
-    printIterableToFile(os.path.join(analysisSummaryFolder, 'validSources_{}.txt'.format(currentDate)), [("mbId", "counts_by_lengths...")] + validSources)
+    printIterableToFile(os.path.join(analysisSummaryFolder, 'validDocsFiles_{}.txt'.format(currentDate)), [("mbId", "lang", "type", "fullpath", "sha1", "size_bytes", "mtime")] + validDocsFiles)
+    printIterableToFile(os.path.join(analysisSummaryFolder, 'validSources_{}.txt'.format(currentDate)), [("mbId", "counts_by_langs...")] + validSources)
     printIterableToFile(os.path.join(analysisSummaryFolder, 'warnings_{}.txt'.format(currentDate)), [("mbId", "path", "description")] + warnings)
     printIterableToFile(os.path.join(analysisSummaryFolder, 'fileNamesRecognitionProblems_{}.txt'.format(currentDate)), [("mbId", "lang", "type", "relativePath", "description")] + originalFileNamesRecognitionProblems)
     printIterableToFile(os.path.join(analysisSummaryFolder, 'docsSkippedByFileName_{}.txt'.format(currentDate)), [("mbId", "relativePath", "description")] + docsRecognizedAndSkippedByFileName)

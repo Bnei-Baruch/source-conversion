@@ -34,12 +34,12 @@ def getLangFromFileName(filename):
 
 
 def main(args):
-    parser = argparse.ArgumentParser(description='Convertion doc -> docx -> cleaned html + mbId -> uid directory structure. Working with a copy of source folder')
-    parser.add_argument('srcFolderPath', action="store", help="Root folder (copy to destfolder and then copy_folder is processed)")
+    parser = argparse.ArgumentParser(description='Convertion doc -> docx -> cleaned html + mbId -> uid directory structure. Works with a copy of source folder', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('srcFolderPath', action="store", help="Root folder (copy to destfolder and then copied_folder is processed)")
     parser.add_argument('-destFolderPath', action="store", default=".", help="Dest folder")
     parser.add_argument('-langMapFilePath', default="./langMap.json", action="store", help="postgres connection params")
-    parser.add_argument('-postgresqlOptFilePath', default="./postgresqlOpt.json", action="store", help="postgres connection params")
-    parser.add_argument('-tidyOptionsFilePath', default="./tidyOptions.json", action="store", help="options for tidy (html -> cleaned html)")
+    parser.add_argument('-postgresqlOptFilePath', default="./postgresqlOpt.json", action="store", help="postgres connection params as json")
+    parser.add_argument('-tidyOptionsFilePath', default="./tidyOptions.json", action="store", help="options for tidy (html -> cleaned html) as json")
     results = parser.parse_args(args)
 
     srcFolderPath = normalizeFilePath(results.srcFolderPath)

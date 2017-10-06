@@ -28,13 +28,28 @@ copyFilesByPatternsWIthDirectoryStructurePreserve.py    - copy stage
 organizeOriginalDocsByMBId.py                           - analyze + organize stage
 convertToHtml.py                                        - convert stage script
 
+runConvertionPipeline.py                                - all stages at one (with possibility to disable some, see below)
+
 
 !!!!!!!!!Every module support -h option (to get args description)!!!!!!!!!
 
 **********************************************
 
 ./copyFilesByPatternsWIthDirectoryStructurePreserve.py -h
-  
+usage: copyFilesByPatternsWIthDirectoryStructurePreserve.py
+       [-h] [-p PATTERNS] [--cleanDestDir] srcfolder destfolder
+
+Copy files with preserving a structure of directories
+
+positional arguments:
+  srcfolder       Source folder
+  destfolder      Dest folder (with ____beavoda part)
+
+optional arguments:
+  -h, --help      show this help message and exit
+  -p PATTERNS     Extension patterns for sourceFilePath docs (default:
+                  ['*.doc', '*.docx'])
+  --cleanDestDir  Clean dest src before (default: False)
 
 
 
@@ -42,44 +57,296 @@ convertToHtml.py                                        - convert stage script
 Example:
 ./copyFilesByPatternsWIthDirectoryStructurePreserve.py /mnt/Mdb_Sources/____beavoda /run/media/dalegur/DATA/Documents/BB_MDB/Mapping/docs_copy/____beavoda
 
+all inside (relative) ____beavoda at remote copy to local folder
+
 **********************************************
 
 ./organizeOriginalDocsByMBId.py -h
+usage: organizeOriginalDocsByMBId.py [-h] [-mappingfilepath MAPPINGFILEPATH]
+                                     [-p PATTERNS]
+                                     [-destFolderPath DESTFOLDERPATH]
+                                     [-langMapFilePath LANGMAPFILEPATH]
+                                     [--cleanOrganizedBefore]
+                                     srcFolder
+
+Analysis and docs organizing
+
+positional arguments:
+  srcFolder             Full path to sources folder
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -mappingfilepath MAPPINGFILEPATH
+                        Full path to Roza's mapping.xslx file (default: ./mapping.xlsx)
+  -p PATTERNS           Extension patterns for source docs (default: ['*.doc','*.docx'])
+  -destFolderPath DESTFOLDERPATH
+                        Path where organized and amalysis folders will be
+                        (default: .)
+  -langMapFilePath LANGMAPFILEPATH
+                        Lang3letter -> Lang2letter json map (default: ./langMap.json)
+  --cleanOrganizedBefore
+                        Clean destFolderPath/organized before (default: False)
 
 
-Script creates 'analysis' folder (where script is located) and copy result of analysis there
-    analyze_2017-10-03_15:16:27.386195.csv
-    docsSkippedByFileName_2017-10-03_15:16:27.386195.txt
-    fileNamesRecognitionProblems_2017-10-03_15:16:27.386195.txt
-    summary_2017-10-03_15:16:27.386195.txt
-    validDocsFiles_2017-10-03_15:16:27.386195.txt
-    validSources_2017-10-03_15:16:27.386195.txt
-    warnings_2017-10-03_15:16:27.386195.txt
+Script creates 'analysis' folder (under <destFolderPath>) and copy result of analysis there (detail description runConvertionPipeline.py below)
+    analyze_<DATE>csv
+    docsSkippedByFileName_<DATE>.txt
+    fileNamesRecognitionProblems_<DATE>.txt
+    summary_<DATE>.txt
+    validDocsFiles_<DATE>.txt
+    validSources_<DATE>.txt
+    warnings_<DATE>.txt
 
 Example (started from script's location):
-./organizeOriginalDocsByMBId.py /run/media/dalegur/DATA/Documents/BB_MDB/Mapping/docs_copy/ /run/media/dalegur/DATA/Documents/BB_MDB/Mapping/Mapping_01.10.2017.xlsx -c ./validdocs
+./organizeOriginalDocsByMBId.py /run/media/dalegur/DATA/Documents/BB_MDB/Mapping/docs_copy/ -mappingfilepath /run/media/dalegur/DATA/Documents/BB_MDB/Mapping/Mapping_01.10.2017.xlsx -destFolderPath ./validdocs
 
    
 **********************************************
 
 ./convertToHtml.py -h
-
-usage: convertToHtml.py [-h] rootfolder destfolder
+usage: convertToHtml.py [-h] [-destFolderPath DESTFOLDERPATH]
+                        [-langMapFilePath LANGMAPFILEPATH]
+                        [-postgresqlOptFilePath POSTGRESQLOPTFILEPATH]
+                        [-tidyOptionsFilePath TIDYOPTIONSFILEPATH]
+                        srcFolderPath
 
 Convertion doc -> docx -> cleaned html + mbId -> uid directory structure.
-Working with a copy of source folder
+Works with a copy of source folder
 
 positional arguments:
-  rootfolder  Root folder (copy to destfolder and then copy_folder is
-              processed)
-  destfolder  Dest folder
+  srcFolderPath         Root folder (copy to destfolder and then copied_folder
+                        is processed)
 
 optional arguments:
-  -h, --help  show this help message and exit
+  -h, --help            show this help message and exit
+  -destFolderPath DESTFOLDERPATH
+                        Dest folder (default: .)
+  -langMapFilePath LANGMAPFILEPATH
+                        postgres connection params (default: ./langMap.json)
+  -postgresqlOptFilePath POSTGRESQLOPTFILEPATH
+                        postgres connection params as json (default: ./postgresqlOpt.json)
+  -tidyOptionsFilePath TIDYOPTIONSFILEPATH
+                        options for tidy (html -> cleaned html) as json
+                        (default: ./tidyOptions.json)
 
-Script creates 'converting' folder (where script is located) with convertion errors file
-    unrecognizedFolderNames.txt         - folders which can not be mapped (mbid -> uid)
-    fileNamesWithUnrecognizedLangs.txt  - files where lang not recognized/supported (see langMap.json file)
+
+
+
+Script creates (full description see at runConvertionPipeline.py below)
+        'converting' folder:
+            unrecognizedFolderNames.txt         - folders which can not be mapped (mbid -> uid)
+            fileNamesWithUnrecognizedLangs.txt  - files where lang not recognized/supported (see langMap.json file)
+        'converted' folder:
+            uid-> docs, docx, htmls with index.json
 
 Example (from script location)
-./convertToHtml.py ./validdocs ./converted
+./convertToHtml.py ./validdocs -destFolderPath ./converted
+
+
+
+**********************************************
+Whole pipeline script
+
+
+./runConvertionPipeline.py -h
+usage: runConvertionPipeline.py [-h] [-destFolderPath DESTFOLDERPATH]
+                                [--skipCopy] [-copyPathPrefix COPYPATHPREFIX]
+                                [-copyPatterns COPYPATTERNS] [--skipOrganize]
+                                [-mappingFilePath MAPPINGFILEPATH]
+                                [-organizePatterns ORGANIZEPATTERNS]
+                                [-langMapFilePath LANGMAPFILEPATH]
+                                [--skipConvert]
+                                [-postgresqlOptFilePath POSTGRESQLOPTFILEPATH]
+                                [-tidyOptionsFilePath TIDYOPTIONSFILEPATH]
+                                srcFolderPath
+
+Run whole pipeline (copy, convert, organize)
+
+positional arguments:
+  srcFolderPath         Sources folder (PATH/____beavoda/
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -destFolderPath DESTFOLDERPATH
+                        Dest path (all stages folders will be here) (default:
+                        .)
+  --skipCopy            Skip copy stage (default: False)
+  -copyPathPrefix COPYPATHPREFIX
+                        Paths at mapping xlsx file has ____beavoda/ prefix
+                        (4.10.2017) (default: ____beavoda)
+  -copyPatterns COPYPATTERNS
+                        Patterns for source docs copy stage filtering
+                        (default: ['*.doc', '*.docx'])
+  --skipOrganize        Skip organize stage (default: False)
+  -mappingFilePath MAPPINGFILEPATH
+                        Path to Roza's maping file (default: ./mapping.xlsx)
+  -organizePatterns ORGANIZEPATTERNS
+                        Patterns for files filter (default: ['*.doc', '*.docx'])
+  -langMapFilePath LANGMAPFILEPATH
+                        Map lang3letters -> lang2letters at JSON format
+                        (default: ./langMap.json)
+  --skipConvert         Skip convert stage (default: False)
+  -postgresqlOptFilePath POSTGRESQLOPTFILEPATH
+                        postgres connection params as json (default: ./postgresqlOpt.json)
+  -tidyOptionsFilePath TIDYOPTIONSFILEPATH
+                        options for tidy (html -> cleaned html) as json
+                        (default: ./tidyOptions.json)
+
+
+EXAMPLE:
+
+!!!!! it is better to run copy stage only once and next conversion start with --skipCopy option!!!!!
+
+./runConvertionPipeline.py /mnt/Mdb_Sources/____beavoda -destFolder /run/media/dalegur/DATA/Documents/BB_MDB/Convertion/ -mappingFilePath /run/media/dalegur/DATA/Documents/BB_MDB/Mapping/Mapping_01.10.2017.xlsx  --skipCopy
+
+/mnt/Mdb_Sources/____beavoda                                            - sourceFolder
+
+-destFolder /run/media/dalegur/DATA/Documents/BB_MDB/Convertion/        - under this folder will be folders:
+                                                                            copied          
+                                                                            analysisSummary 
+                                                                            organized
+                                                                            converted
+
+-mappingFilePath /run/media/dalegur/DATA/Documents/BB_MDB/Mapping/Mapping_01.10.2017.xlsx
+--skipCopy
+
+Algorithm:
+    1) "copy stage" produces under <destFolder>:
+            'copied' folder (pay attention at copyPathPrefix param)
+    2) cleans 'organized'folder and then 'organize stage' produces under <destFolder>:
+            'analysisSummary' folder        - result of analysis with files:
+                'analyze_<DATE>.csv'        - contains information about sources (with at least one doc) and num of docs with languages:
+                                                "
+                                                    id,eng,heb,rus,fre,hun,ita,spa,por,ukr
+                                                    2,1,2,2,0,0,0,0,0,0
+                                                    ....
+                                                "
+                                            source with mdbId = 2: has 1 eng, 2 heb, 2 rus, docs (Only ONE document per language will be converted!!!!!) 
+                'docsSkippedByFileName_<DATE>.txt'          - docs which we "recognized" and skipped (_scan, _im_nikud docs etc):
+                        "                        
+                        [                        
+                            [
+                                "mbId",
+                                "relativePath",
+                                "description"
+                            ],
+                            [
+                                "2",
+                                "____beavoda/70_baal-sulam/mekorot/akdamot/akdama-pticha/heb_o_bs-akdama-pticha_scan.doc",
+                                "SCAN doc skipped"
+                            ],
+                        ...
+                        ]
+                        " 
+                'fileNamesRecognitionProblems_<DATE>.txt'   - skipped files (for example if there is several "heb" lang docs in folder):
+                        "
+                        [
+                            [
+                                "mbId",
+                                "lang",
+                                "type",
+                                "relativePath",
+                                "description"
+                            ],
+                            [
+                                "2",
+                                "heb",
+                                "o",
+                                "____beavoda/70_baal-sulam/mekorot/akdamot/akdama-pticha/heb_o_bs-akdama-pticha.doc",
+                                "Multiple 'original' files for lang (DUPLICATED)"
+                            ],
+                        ...
+                        ]
+                        "
+                        DUPLICATED        - several lang docs
+                        NEW_DUPLICATED    - if several lang docs with new format (started with pagename)
+                        UNRECOGNIZED      - unrecognized lang (see langMap.json file)
+
+                'summary_<DATE>.txt'         - some analysis summary
+                'validDocsFiles_<DATE>.txt'  - docs with paths, sha1, length etc
+                    "                    
+                    [
+                        [
+                            "mbId",
+                            "lang",
+                            "type",
+                            "fullpath",
+                            "sha1"
+                            "size_bytes",
+                            "mtime"
+                        ],
+                        [
+                            "2",
+                            "eng",
+                            "t",
+                            "____beavoda/70_baal-sulam/mekorot/akdamot/akdama-pticha/154_eng_t_bs-akdama-pticha.docx",
+                            "104f9a5dab0be6936755004098e9dc01db65ea6f",
+                            25263,
+                            1507196785
+                        ],
+                    ...
+                    ]
+                    "
+                'validSources_<DATE>.txt'    -  contains 'valid sources' (at least with one doc) and lang<->docs count
+                    "
+                    [
+                        [
+                            "mbId",
+                            "counts_by_langs..."
+                        ],
+                        [
+                            "2",
+                            {
+                                "eng": 1,
+                                "heb": 2,
+                                "rus": 2
+                            }
+                        ],
+                    ...
+                    "
+                'warnings_<DATE>.txt' - contains other 'warnings' (path is not exists at copy folder (because remote doesn't have) or not contains any doc/docx files)
+                    "                    
+                    [
+                        [
+                            "mbId",
+                            "path",
+                            "description"
+                        ],
+                        [
+                            "1",
+                            "",
+                            "Path field in mapping file is empty"
+                        ],
+                    ...
+                    "
+            'organized'  folder           - contains of structure: folder with mbId name -> one doc per language:
+                                                2   -> 
+                                                        154_eng_t_bs-akdama-pticha.docx
+                                                        154_heb_o_bs-akdama-pticha.docx
+                                                        154_rus_t_bs-akdama-pticha.doc    
+            !!!!!!!!!!!!!! We prefer NEW FORMAT DOCS (started with 'PAGENUMBER_LANG_...')  !!!!!!!!!!!!!!!!!!
+
+    3) Convert stage produces under <destFolder>:
+            'convertingSummary' folder    - result of convertion:
+                fileNamesWithUnrecognizedLangs_<DATE>.txt
+                idUidMap_<DATE>.txt                              - retrieved from DB
+                sofficeErrors_<DATE>.txt                         - std errors
+                tidyErrors_<DATE>.txt                            - std errors
+                unrecognizedFolderNames_<DATE>.txt               - has not translation mbId -> uid
+
+            'converted' folder       - UID -> doc(s)/docx(s) + html(s) + index.json:
+                                          oR5RMMX3 (mbId = 1005 - from generated "idUidMap_<DATE>.txt" file) -> 
+                                                heb_text_dargot-sulam-236-mlea-kol-arez_rabash.doc
+                                                heb_text_dargot-sulam-236-mlea-kol-arez_rabash.docx
+                                                heb_text_dargot-sulam-236-mlea-kol-arez_rabash.html
+                                                index.json: 
+                                                    {
+                                                        "he": {
+                                                            "doc": "heb_text_dargot-sulam-236-mlea-kol-arez_rabash.doc",
+                                                            "docx": "heb_text_dargot-sulam-236-mlea-kol-arez_rabash.docx",
+                                                            "html": "heb_text_dargot-sulam-236-mlea-kol-arez_rabash.html"
+                                                        }
+                                                    }
+                                            
+                                                
+    
