@@ -146,6 +146,12 @@ optional arguments:
                         (default: ./tidyOptions.json)
 
 
+(conversionFunctions.py)
+CONVERTS doc -> docx by command:
+    cmd = 'soffice' + ' --headless' + ' --convert-to' + ' docx' + ' --outdir ' + workingPath + ' ' + workingPath+os.path.sep+"*.doc"
+CONVERTS docx -> html by command:
+    pypandoc.convert_file(sourcepath, to='html5', extra_args=['-s'], outputfile=destpath)
+    
 
 
 Script creates (full description see at runConvertionPipeline.py below)
