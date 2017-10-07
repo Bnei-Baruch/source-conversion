@@ -59,6 +59,22 @@ Example:
 
 all inside (relative) ____beavoda at remote copy to local folder
 
+
+!!! under working folder creates summary files:
+       'copiedFiles_<DATE>.txt' : 
+                "            
+                [                
+                    [
+                        "from",
+                        "to"
+                    ],
+                    [
+                        "/mnt/Mdb_Sources/____beavoda/70_baal-sulam/mekorot/shamati+/513_001-ein-od-milvado/513_eng_t_bs-001-ein-od-milvado.docx",
+                        "/run/media/dalegur/DATA/Documents/BB_MDB/Convertion/copied/____beavoda/70_baal-sulam/mekorot/shamati/513_001-ein-od-milvado/513_eng_t_bs-001-ein-od-milvado.docx"
+                    ],
+                ...
+                ]
+       'skippedFiles_<DATE>.txt'    
 **********************************************
 
 ./organizeOriginalDocsByMBId.py -h

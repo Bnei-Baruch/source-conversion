@@ -5,6 +5,7 @@ import sys
 import shutil
 import fnmatch
 import argparse
+import datetime
 
 # fileUtils.py
 import fileUtils
@@ -22,6 +23,9 @@ def main(args):
     patterns = list(set(results.patterns))
     dest = fileUtils.normalizeFilePath(results.destfolder)
     clearDestDir = results.cleanDestDir
+
+    copiedFiles = []
+    skippedFiles = []
 
     print("Copy stage runned with:\nsrc: {}\n patterns: {}\ndest: {}\n clearDestDir: {}".format(src,patterns,dest, clearDestDir))
 
@@ -44,11 +48,17 @@ def main(args):
                     if (not os.path.isfile(destFilePath)):
                         print("copy from: '%s'\n\tto: '%s'" % (sourceFilePath, destFilePath))
                         shutil.copyfile(sourceFilePath, destFilePath)
+                        copiedFiles.append((sourceFilePath, destFilePath))
                     else:
                         print("File already exists. Skipped: '%s'" % (destFilePath))
+                        skippedFiles.append((sourceFilePath, destFilePath))
                 except OSError as err:
                     print(err)
 
+    print("CopiedFiles: {}, skippedFiles: {}".format(len(copiedFiles), len(skippedFiles)))
+    currentDate = str(datetime.datetime.now()).replace(' ', '_');
+    fileUtils.printIterableToFile("./copiedFiles_{}.txt".format(currentDate), ["from", "to"] + copiedFiles)
+    fileUtils.printIterableToFile("./skippedFiles_{}.txt".format(currentDate), ["from", "to"] + skippedFiles)
 
 if __name__ == '__main__':
     main(sys.argv[1:])
