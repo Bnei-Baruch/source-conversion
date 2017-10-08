@@ -71,7 +71,8 @@ def main(args):
     cur = connection.cursor()
     cur.execute("select id, uid from sources;")
     idUidMap = dict(cur.fetchall())
-
+    cur.close()
+    connection.close()
 
     #result of analisys folder
     convertingSummaryFolder = os.path.join(destFolderPath, 'convertingSummary')
