@@ -1,0 +1,14 @@
+Test for soffice batch doc conversion vs 1by1
+(batch at least 5 times faster!, times in output = time from script start)
+
+convert /home/dalegur/Documents/Bnei-Baruch-source-conversion/tests/testSoffice/Test_soffice_batch_1/rus_t_bs-igeret-08-1922-pg-018 (copy 3).doc -> /home/dalegur/Documents/Bnei-Baruch-source-conversion/tests/testSoffice/Test_soffice_batch_results_batch//rus_t_bs-igeret-08-1922-pg-018 (copy 3).docx using filter : Office Open XML Text
+....
++[9203ms][./testBatchSoffice.sh:8]: main(): find ./Test_soffice_batch_1/ -name '*.doc' -exec soffice --headless --convert-to docx --outdir ./Test_soffice_batch_results_1by1/ '{}' ';'
+....
++[53288ms][./testBatchSoffice.sh:10]: main(): date
+Sun Oct  8 13:22:06 MSK 2017
+
+
+So 30 docs conversion:
+    batch - 9.2 seconds
+    1by1 - 53.2-9.2 ~ 44 seconds
