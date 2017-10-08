@@ -2,6 +2,7 @@
 
 import os
 import subprocess
+import shutil
 
 # pip install pypandoc
 import pypandoc
@@ -9,25 +10,43 @@ import pypandoc
 #pip install pytidylib
 import tidylib
 
-# sourcePath - source file
-# resultDocxFileName - (only output dir can be setted for soffice)
-def convertFromDocToDocx(workingPath, sofficeErrors):
-    print("\tStart doc->docx convertion. WorkingPath:{}".format(workingPath))
-    cmd = 'soffice' + ' --headless' + ' --convert-to' + ' docx' + ' --outdir ' + workingPath + ' ' + workingPath+os.path.sep+"*.doc"
+# inputPaths - folders woth doc files
+# outputPath - docx results folder
+# filenameToFolderMap - for moving docx to original doc folder
+# sofficeErrors
+def convertFromDocToDocx(inputPaths, outputPath, filenameToFolderMap, sofficeErrors):
+    print("\t\tStart doc->docx convertion. WorkingPaths:{}".format(inputPaths))
+
+    cmd = 'soffice' + ' --headless' + ' --convert-to' + ' docx' + ' --outdir ' + outputPath + ' ' + " ".join([t + '/*.doc' for t in inputPaths])
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     stdout, stderr = p.communicate()
-    print("\t{}".format(stdout))
+    print("\t\t{}".format(stdout))
     if(len(stderr)>0):
-        sofficeErrors.put((cmd, workingPath, str(stderr)))
-    print("\t\tDone converting from doc to docx. Working path: {}".format(workingPath))
+        sofficeErrors.put((cmd, str(stdout), str(stderr)))
+    print("\t\t\tDone converting from doc to docx. outputPath path: {}\n\t\tMove docx to correspond folders".format(outputPath))
+
+    for docxFileName in os.listdir(outputPath):
+        dirToMove = filenameToFolderMap.get(os.path.splitext(docxFileName)[0])
+        if(dirToMove):
+            resultFileName = docxFileName
+
+            if(docxFileName.startswith("TMP_NAME_")):
+                # 'TMP_NAME_<DIRNAME>_FILENAME' pattern
+                resultFileName = ''.join(docxFileName.split("_")[3:])
+            docxFilePath = outputPath + os.path.sep + docxFileName
+            movedToFilePath = dirToMove + os.path.sep + resultFileName
+            shutil.move(docxFilePath, movedToFilePath)
+            print("\t\t\t'{}' moved to '{}'".format(docxFilePath, movedToFilePath))
+        else:
+            sofficeErrors.put((cmd, "Not found source dir for file: '{}'".format(docxFileName)))
     return
 
 def convertFromDocxToHtml(sourcepath, destpath, tidyOptions, tidyErrors):
-    print("\tStart convert from docx to html (pandoc) sourcepath:{}, destpath:{}".format(sourcepath, destpath))
+    print("\t\tStart docx->html convertion (pandoc) sourcepath:{}, destpath:{}".format(sourcepath, destpath))
     pypandoc.convert_file(sourcepath, to='html5', extra_args=['-s'], outputfile=destpath)
-    print("\t\tDone converting from docx to html (pandoc) sourcepath:{}, destpath:{}".format(sourcepath, destpath))
+    print("\t\t\tDone converting from docx to html (pandoc) sourcepath:{}, destpath:{}".format(sourcepath, destpath))
 
-    print("\tStart to tidy html. Input file '{}'".format(destpath))
+    print("\t\tStart to tidy html. Input file '{}'".format(destpath))
     with open(destpath, 'r') as myfile:
         htmlFileContent = myfile.read().replace('\n', '')
     markup, errors = tidylib.tidy_document(htmlFileContent, tidyOptions)
@@ -35,7 +54,7 @@ def convertFromDocxToHtml(sourcepath, destpath, tidyOptions, tidyErrors):
         tidyErrors.put((destpath, str(errors)))
     with open(destpath, 'w') as myfile:
         myfile.write(markup)
-    print("\t\tDone to tidy html file '{}'. Errors: {}".format(destpath, errors))
+    print("\t\t\tDone to tidy html file '{}'. Errors: {}".format(destpath, errors))
     return
 
 

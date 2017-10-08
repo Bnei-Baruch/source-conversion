@@ -60,9 +60,10 @@ def main(args):
         copyPatternsArgs[::2] = ["-p" for t in copyPatterns]
         copyPatternsArgs[1::2] = copyPatterns
         #srcfolder destfolder [-p pattern -p pattern] --cleanDestDir
+        print("Start copy stage")
         copyFilesByPatternsWIthDirectoryStructurePreserve.main([srcFolderPath, copiedFolderPath] + copyPatternsArgs)
     else:
-        print("Skip copy step")
+        print("Skip copy stage")
 
     #ORGANIZE
     if(not skipOrganize):
@@ -70,15 +71,17 @@ def main(args):
         organizePatternsArgs[::2] = ["-p" for t in organizePatterns]
         organizePatternsArgs[1::2] = organizePatterns
         # srcFolderPath mappingfilepath [-p pattern -p pattern] destFolderPath -langMapFile
+        print("Start organize stage")
         organizeOriginalDocsByMBId.main([destFolderPath + os.path.sep + "copied/", "-mappingfilepath", mappingFilePath, "-destFolderPath", destFolderPath, "-langMapFilePath", langMapFilePath, "--cleanOrganizedBefore"] + organizePatternsArgs)
     else:
-        print("Skip organize step")
+        print("Skip organize stage")
 
     if(not skipConvert):
         # srcFolderPath destFolderPath [-langMapFilePath langMapFilePath] [-postgresqlOptFilePath psqlOptPath]
+        print("Start convert stage")
         convertToHtml.main([destFolderPath + os.path.sep + "organized/", "-destFolderPath", destFolderPath, "-langMapFilePath", langMapFilePath, "-postgresqlOptFilePath", postgresqlOptFilePath, "-tidyOptionsFilePath", tidyOptionsFilePath])
     else:
-        print("Skip convert step")   
+        print("Skip convert stage")
 
 if __name__ == '__main__':
     main(sys.argv[1:])
