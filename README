@@ -1,18 +1,23 @@
 Dependencies:
 
 1) python 3.x (*last version*, tested with 3.6.2)
-2) Python libs (dependencies)
+
+2) Tools:
+
+    soffice (libre office, *last version*, tested with 'LibreOffice 5.3.6.1 30m0(Build:1)') - doc -> docx converter (and many other formats)
+    pandoc (https://pandoc.org/, *last version*, tested with 'pandoc 1.19.2.1') - docx -> html converter
+    tidy (http://www.html-tidy.org/, *last version*, tested with 'HTML Tidy for Linux version 5.4.0') - html cleaner
+    tidy (http://www.html-tidy.org/, *last version*, tested with 'HTML Tidy for Linux version 5.4.0') - html cleaner
+
+3) Python libs (dependencies)
 
     pip install -U pip # make sure to have an up-to-date pip
     pip install pypandoc  (https://pypi.python.org/pypi/pypandoc)
     pip install pytidylib  (http://countergram.com/open-source/pytidylib/docs/index.html)
     pip install psycopg2 (http://initd.org/psycopg/download/)
+    pip install pyexcel (https://pyexcel.readthedocs.io/en/latest/)
+    pip install pyexcel-xslx (https://pyexcel.readthedocs.io/en/latest/)
 
-3) Tools:
-
-    soffice (libre office, *last version*, tested with 'LibreOffice 5.3.6.1 30m0(Build:1)') - doc -> docx converter (and many other formats)
-    pandoc (https://pandoc.org/, *last version*, tested with 'pandoc 1.19.2.1') - docx -> html converter
-    tidy (http://www.html-tidy.org/, *last version*, tested with 'HTML Tidy for Linux version 5.4.0') - html cleaner
 
 3) Files Description:
 
@@ -218,6 +223,9 @@ optional arguments:
 EXAMPLE:
 
 !!!!! it is better to run copy stage only once and next conversion start with --skipCopy option!!!!!
+!!!!! You must provide Roza's xlsx maping file (-mappingFilePath param)!!!!! ()
+
+
 
 ./runConvertionPipeline.py /mnt/Mdb_Sources/____beavoda -destFolder /run/media/dalegur/DATA/Documents/BB_MDB/Convertion/ -mappingFilePath /run/media/dalegur/DATA/Documents/BB_MDB/Mapping/Mapping_01.10.2017.xlsx  --skipCopy
 
@@ -232,11 +240,11 @@ EXAMPLE:
 -mappingFilePath /run/media/dalegur/DATA/Documents/BB_MDB/Mapping/Mapping_01.10.2017.xlsx
 --skipCopy
 
-Algorithm:
+Algorithm (every stage is enabled):
     1) "copy stage" produces under <destFolder>:
             'copied' folder (pay attention at copyPathPrefix param)
-    2) cleans 'organized'folder and then 'organize stage' produces under <destFolder>:
-            'analysisSummary' folder        - result of analysis with files:
+    2) cleans '<destFOlder>/organized' folder (!) and then 'organize stage' produces under <destFolder>:
+            '<destFOlder>/analysisSummary' folder        - result of analysis with files:
                 'analyze_<DATE>.csv'        - contains information about sources (with at least one doc) and num of docs with languages:
                                                 "
                                                     id,eng,heb,rus,fre,hun,ita,spa,por,ukr
@@ -341,7 +349,7 @@ Algorithm:
                         ],
                     ...
                     "
-            'organized'  folder           - contains of structure: folder with mbId name -> one doc per language:
+            '<destFOlder>/organized'  folder           - contains of structure: folder with mbId name -> one doc per language:
                                                 2   -> 
                                                         154_eng_t_bs-akdama-pticha.docx
                                                         154_heb_o_bs-akdama-pticha.docx
@@ -349,14 +357,14 @@ Algorithm:
             !!!!!!!!!!!!!! We prefer NEW FORMAT DOCS (started with 'PAGENUMBER_LANG_...')  !!!!!!!!!!!!!!!!!!
 
     3) Convert stage produces under <destFolder>:
-            'convertingSummary' folder    - result of convertion:
+            '<destFOlder>/convertingSummary' folder    - result of convertion:
                 fileNamesWithUnrecognizedLangs_<DATE>.txt
                 idUidMap_<DATE>.txt                              - retrieved from DB
                 sofficeErrors_<DATE>.txt                         - std errors
                 tidyErrors_<DATE>.txt                            - std errors
                 unrecognizedFolderNames_<DATE>.txt               - has not translation mbId -> uid
 
-            'converted' folder       - UID -> doc(s)/docx(s) + html(s) + index.json:
+            '<destFOlder>/converted' folder       - UID -> doc(s)/docx(s) + html(s) + index.json:
                                           oR5RMMX3 (mbId = 1005 - from generated "idUidMap_<DATE>.txt" file) -> 
                                                 heb_text_dargot-sulam-236-mlea-kol-arez_rabash.doc
                                                 heb_text_dargot-sulam-236-mlea-kol-arez_rabash.docx
