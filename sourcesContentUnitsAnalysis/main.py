@@ -51,7 +51,7 @@ def main(args):
     pathToIndexFile = normalizeFilePath("/home/dalegur/Downloads/files-archive-roza_sorted.csv")
     postgresqlOptFilePath = normalizeFilePath("./postgresqlOpt.json")
     destFolderPath = normalizeFilePath('./')
-    fetchDataFromDbAndSaveToFile = Екгу
+    fetchDataFromDbAndSaveToFile = False
     mdbDFilesFileName = "mdbFilesFromMdb"
     mdbSOurceOCntentUnitRelationFileName = "mdbSourceContentUnitRelation"
 
