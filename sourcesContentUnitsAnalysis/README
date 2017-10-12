@@ -1,0 +1,15 @@
+
+
+
+
+
+
+1) Превращаем архивный файл в csv
+cat files-archive-roza.txt | tr -d '"[]' | sort > files-archive-roza_sorted.csv
+
+
+2) сортируем csv по первой колонке (может и не нужно)
+cat files-archive-roza.csv | sort -t , -k1,1 > files-archive-roza_sorted.csv
+
+
+
