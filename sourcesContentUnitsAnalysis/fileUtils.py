@@ -25,13 +25,12 @@ class Tee(object):
             f.flush()
 
 #functon to print both console and file
-def printToFileAndConsole(filename, stringstoprint):
+def printToFileAndConsole(file, stringstoprint):
     original = sys.stdout
     try:
-        with open(filename, 'w') as f:
-            sys.stdout = Tee(sys.stdout, f)
-            for stringtoprint in stringstoprint:
-                print(stringtoprint)
+        sys.stdout = Tee(sys.stdout, file)
+        for stringtoprint in stringstoprint:
+            print(stringtoprint)
     finally:
         sys.stdout = original
     return

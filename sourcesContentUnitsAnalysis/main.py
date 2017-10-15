@@ -10,11 +10,13 @@ import pickle
 import datetime
 import json
 
+# pip install pyexcel
+import pyexcel as p
+
 # compareIndexAndMdb.py
 from compareIndexAndMdb import compareIndexPartAndMdb
 
 #import argparse
-
 
 # fileUtils.py
 from fileUtils import normalizeFilePath, printToFileAndConsole
@@ -48,12 +50,13 @@ def main(args):
     # results = parser.parse_args(args)
 
 
-    pathToIndexFile = normalizeFilePath("/home/dalegur/Downloads/files-archive-roza_sorted.csv")
+    indexFilePath = normalizeFilePath("/mnt/DATA/Documents/BB_MDB/Mapping/20171013-archive_sorted.csv")
+    mappingFilePath = normalizeFilePath("/mnt/DATA/Documents/BB_MDB/Mapping/Mapping_06.10.2017.xlsx")
     postgresqlOptFilePath = normalizeFilePath("./postgresqlOpt.json")
     destFolderPath = normalizeFilePath('./')
     fetchDataFromDbAndSaveToFile = False
     mdbDFilesFileName = "mdbFilesFromMdb"
-    mdbSOurceOCntentUnitRelationFileName = "mdbSourceContentUnitRelation"
+    mdbSOurceOCntentUnitRelationFileName = "mdbContentUnitSourceRelation"
 
     analysisSummaryFolder = os.path.join(destFolderPath, 'analysisSummary')
     databaseDataFolder = os.path.join(destFolderPath, 'databaseDataFolder')
@@ -70,47 +73,56 @@ def main(args):
             postgresqlOpt = json.load(postgresqlOpt_json)
         connection = psycopg2.connect(host=postgresqlOpt["host"], dbname=postgresqlOpt["dbname"], user=postgresqlOpt["user"], password=postgresqlOpt["password"])
         cur = connection.cursor()
-        print("Query files data")
+        print("Query files data...")
         cur.execute("select encode(f.sha1, 'hex') as sha1, f.id as file_id, f.name as file_name, f.size as file_size, cu.id as content_unit_id, ct.name as content_unit_type_name   from files f left join content_units cu on f.content_unit_id = cu.id left join content_types ct on cu.type_id=ct.id where f.sha1 is not NULL")
         #(sha1, fileId, fileName, fileSize, content_unit_id, content_unit_type_name)
         mdbFilesData = cur.fetchall()
 
         # for sourceId <-> content_unit mapping
-        print("Query sourceId<->contentUnitType data")
-        cur.execute("select s.id as sourceId, cu.id as content_unit_id from content_units_sources cus join sources s on cus.source_id = s.id join content_units cu on cus.content_unit_id = cu.id")
+        print("Query sourceId<->contentUnitType data...")
+        cur.execute("select cu.id as content_unit_id, s.id as sourceId from content_units_sources cus join sources s on cus.source_id = s.id join content_units cu on cus.content_unit_id = cu.id")
         #(sourceId, content_unit_id)
-        mdbSourceContentUnitRelationData = cur.fetchall()
+        mdbContentUnitSourceRelationData = cur.fetchall()
 
         cur.close()
         connection.close()
         print("Save database data as:\n\t'{}'\nand\n\t'{}'".format(mdbDFilesFilePath, mdbSOurceOCntentUnitRelationFilePath))
         with open(mdbDFilesFilePath, 'wb') as mdbFilesFile, open(mdbSOurceOCntentUnitRelationFilePath, 'wb') as mdbSOurceOCntentUnitRelationFile:
             pickle.dump(mdbFilesData, mdbFilesFile)
-            pickle.dump(mdbSourceContentUnitRelationData, mdbSOurceOCntentUnitRelationFile)
+            pickle.dump(mdbContentUnitSourceRelationData, mdbSOurceOCntentUnitRelationFile)
     else:
         print("Load database data from:\n\t{}\nand\n\t{}".format(mdbDFilesFilePath, mdbSOurceOCntentUnitRelationFilePath))
         with open(mdbDFilesFilePath, 'rb') as mdbFilesFile, open(mdbSOurceOCntentUnitRelationFilePath, 'rb') as mdbSOurceOCntentUnitRelationFile:
             mdbFilesData = pickle.load(mdbFilesFile)
-            mdbSourceContentUnitRelationData = pickle.load(mdbSOurceOCntentUnitRelationFile)
+            mdbContentUnitSourceRelationData = pickle.load(mdbSOurceOCntentUnitRelationFile)
+
+    # get data from mapping file, skip headers
+    sheet = p.get_sheet(file_name=mappingFilePath, name_columns_by_row=0)
 
     numFilesInIndex = 0
 
     filesInMdbNotInFs = []
     filesInFsNotInMdb = []
+    filesInFsInMdbWIthoutCOntentUnit = []
 
     filesWIthSameHashInMdb = {}
-    filesWIthSameHashInFs = {}
+    #filesAtFsWIthSameHashInFolderMap = {}
+    filesInOneFolderWIthSameHash = []
+    foldersWIthoutSignificantContentUnits = []
+    foldersWIthMultipleSIgnificantContentUnits = []
+    foldersWIthoutBeavodaPartInPath = []
+    foldersWIthBeavodaPartButNotInMappingFile = []
+    foldersWithWrongContentUnitSOurceMapping = []
 
-    filesWithoutContentUnit = []
+    filesEntriesWithoutContentUnitInMdb = []
 
     # every file in folder has entry in Mdb (files table) + every file belong one (or two (with KITEI_MEKOV)) content unit
     validFolders = []
     # with description
     invalidFolders = []
 
-    mdbDataMap = {}
     print("Create mapping by hash for {} mdb entries".format(len(mdbFilesData)))
-    #   0      1            2        3           4                  5
+    mdbDataMap = {}
     # (sha1, fileId, fileName, fileSize, content_unit_id, content_unit_type_name)
     for entry in mdbFilesData:
         (sha1, fileId, fileName, fileSize, contentUnitId, contentTypeName) = entry
@@ -122,16 +134,34 @@ def main(args):
         else:
             mdbDataMap[sha1] = (fileId, fileName, fileSize, contentUnitId, contentTypeName)
         if(not contentUnitId):
-            filesWithoutContentUnit.append((fileId, sha1, fileName))
+            filesEntriesWithoutContentUnitInMdb.append((fileId, sha1, fileName))
 
-    print("Create mapping (sourceId<->content_units) by sourceId for {} entries".format(len(mdbSourceContentUnitRelationData)))
-    mdbSourceIdToContentUnitNameMap = {}
-    # (sourceId, content_unit_id)
-    for entry in mdbSourceContentUnitRelationData:
-        (sourceId, contentUnitId) = entry
-        if(not mdbSourceIdToContentUnitNameMap.get(sourceId, None)):
-            mdbSourceIdToContentUnitNameMap[sourceId] = []
-        mdbSourceIdToContentUnitNameMap[sourceId].append(contentUnitId)
+    print("Create mapping (contentUnit -> sourcesIds) for {} entries".format(len(mdbContentUnitSourceRelationData)))
+    mdbContentUnitIdToSourceIdMap = {}
+    # (content_unit_id, sourceId)
+    for entry in mdbContentUnitSourceRelationData:
+        (contentUnitId, sourceId) = entry
+        if(not mdbContentUnitIdToSourceIdMap.get(contentUnitId, None)):
+            mdbContentUnitIdToSourceIdMap[contentUnitId] = []
+        mdbContentUnitIdToSourceIdMap[contentUnitId].append(sourceId)
+
+    print("Create mapping (folderPath->source_id)")
+    folderToSourceIdMap = {}
+    # (content_unit_id, sourceId)
+
+    rowCounter = 0
+    for row in sheet:
+        if (row[0] == ""):
+            continue
+        mbId = str(int(row[0]))
+        name = row[1]
+        path = row[2]
+        if(path == ""):
+            continue
+        path = path.replace("\\","/")
+        folderToSourceIdMap[path] = mbId
+        rowCounter += 1
+    print("\tMapped {} entries".format(rowCounter))
 
     fsFolderToFilesMap = {}
 
@@ -150,14 +180,22 @@ def main(args):
             output.write(str(item) + '\n')
 
     print("Start to compare mdb and index")
-    with open(pathToIndexFile, "r") as indexFile, \
+    with open(indexFilePath, "r") as indexFile, \
+            open(os.path.join(analysisSummaryFolder, "summary_{}.txt".format(currentDate)), "w") as summaryFile, \
             open(os.path.join(analysisSummaryFolder, "validFolders_{}.txt".format(currentDate)), "w") as validFoldersFile, \
             open(os.path.join(analysisSummaryFolder, "invalidFolders_{}.txt".format(currentDate)), "w") as invalidFoldersFile, \
             open(os.path.join(analysisSummaryFolder, "filesInFsNotInMdb_{}.txt".format(currentDate)), "w") as filesInFsNotInMdbFile, \
             open(os.path.join(analysisSummaryFolder, "filesInMdbNotInFs_{}.txt".format(currentDate)), "w") as filesInMdbNotInFsFile, \
+            open(os.path.join(analysisSummaryFolder, "filesInFsInMdbWIthoutCOntentUnit_{}.txt".format(currentDate)), "w") as filesInFsInMdbWIthoutCOntentUnitFile, \
             open(os.path.join(analysisSummaryFolder, "filesWIthSameHashInMdb_{}.txt".format(currentDate)), "w") as filesWIthSameHashInMdbFile, \
             open(os.path.join(analysisSummaryFolder, "filesWIthSameHashInFs_{}.txt".format(currentDate)), "w") as filesWIthSameHashInFsFile, \
-            open(os.path.join(analysisSummaryFolder, "filesWithoutContentUnit_{}.txt".format(currentDate)), "w") as filesWithoutContentUnitFile:
+            open(os.path.join(analysisSummaryFolder, "filesWithoutContentUnit_{}.txt".format(currentDate)), "w") as filesWithoutContentUnitFile, \
+            open(os.path.join(analysisSummaryFolder, "foldersWIthoutSignificantContentUnits_{}.txt".format(currentDate)), "w") as foldersWIthoutSignificantContentUnitsFile, \
+            open(os.path.join(analysisSummaryFolder, "foldersWIthMultipleSIgnificantContentUnits_{}.txt".format(currentDate)), "w") as foldersWIthMultipleSIgnificantContentUnitsFile, \
+            open(os.path.join(analysisSummaryFolder, "foldersWIthoutBeavodaPartInPathFile_{}.txt".format(currentDate)), "w") as foldersWIthoutBeavodaPartInPathFile, \
+            open(os.path.join(analysisSummaryFolder, "foldersWIthBeavodaPartButNotInMapping_{}.txt".format(currentDate)), "w") as foldersWIthBeavodaPartButNotInMappingFileFile, \
+            open(os.path.join(analysisSummaryFolder, "foldersWithWrongContentUnitSOurceMapping_{}.txt".format(currentDate)), "w") as foldersWithWrongContentUnitSOurceMappingFile:
+
 
         for line in indexFile:
             numFilesInIndex += 1
@@ -169,38 +207,72 @@ def main(args):
             # processing by folders
             if (not folderPath in fsFolderToFilesMap.keys()):
                 if(processingFilesCount >= batchSize):
+                    print("Processing {} folders".format(len(fsFolderToFilesMap.keys())))
                     # processing
                     # return (validFolders, invalidFolders, filesInFsNotInMdb, filesInFsNotInMdb, filesWithNoneContentUnit)
-                    (validFoldersPart, invalidFoldersPart, filesInFsNotInMdbPart, filesWIthSameHashInFsPart) = compareIndexPartAndMdb(mdbDataMap, fsFolderToFilesMap)
+                    (validFoldersPart, invalidFoldersPart, filesInFsNotInMdbPart, filesInFsInMdbWIthoutCOntentUnitPart,
+                     filesInOneFolderWIthSameHashPart, foldersWIthoutSignificantContentUnitsPart, foldersWIthMultipleSIgnificantContentUnitsPart,
+                     foldersWIthoutBeavodaPartInPathPart, foldersWIthBeavodaPartButNotInMappingFilePart, foldersWithWrongContentUnitSOurceMappingPart) = compareIndexPartAndMdb(mdbDataMap, mdbContentUnitIdToSourceIdMap, fsFolderToFilesMap, folderToSourceIdMap)
 
                     validFolders.extend(validFoldersPart)
                     invalidFolders.extend(invalidFoldersPart)
                     filesInFsNotInMdb.extend(filesInFsNotInMdbPart)
-                    filesWIthSameHashInFs.update(filesWIthSameHashInFsPart)
+                    filesInFsInMdbWIthoutCOntentUnit.extend(filesInFsInMdbWIthoutCOntentUnitPart)
+                    # filesAtFsWIthSameHashInFolderMap.update(filesAtFsWIthSameHashInFolderMapPart)
+                    filesInOneFolderWIthSameHash.extend(filesInOneFolderWIthSameHashPart)
+                    foldersWIthoutSignificantContentUnits.extend(foldersWIthoutSignificantContentUnitsPart)
+                    foldersWIthMultipleSIgnificantContentUnits.extend(foldersWIthMultipleSIgnificantContentUnitsPart)
+                    foldersWIthoutBeavodaPartInPath.extend(foldersWIthoutBeavodaPartInPathPart)
+                    foldersWIthBeavodaPartButNotInMappingFile.extend(foldersWIthBeavodaPartButNotInMappingFilePart)
+                    foldersWithWrongContentUnitSOurceMapping.extend(foldersWithWrongContentUnitSOurceMappingPart)
+
                     fsFolderToFilesMap.clear()
+                    processingFilesCount = 0
 
                 fsFolderToFilesMap[folderPath] = []
             # (hash, file_path, size, date)
             fsFolderToFilesMap[folderPath].append((hash, filePath, size, date))
             processingFilesCount+=1
         if(len(fsFolderToFilesMap.keys()) > 0):
-            (validFoldersPart, invalidFoldersPart, filesInFsNotInMdbPart, filesWIthSameHashInFsPart) = compareIndexPartAndMdb(mdbSourceIdToContentUnitNameMap, fsFolderToFilesMap)
+            print("Processing {} folders".format(len(fsFolderToFilesMap.keys())))
+            (validFoldersPart, invalidFoldersPart, filesInFsNotInMdbPart, filesInFsInMdbWIthoutCOntentUnitPart,
+             filesInOneFolderWIthSameHashPart, foldersWIthoutSignificantContentUnitsPart, foldersWIthMultipleSIgnificantContentUnitsPart,
+             foldersWIthoutBeavodaPartInPathPart, foldersWIthBeavodaPartButNotInMappingFilePart, foldersWithWrongContentUnitSOurceMappingPart) = compareIndexPartAndMdb(mdbDataMap, mdbContentUnitIdToSourceIdMap, fsFolderToFilesMap, folderToSourceIdMap)
+
             validFolders.extend(validFoldersPart)
             invalidFolders.extend(invalidFoldersPart)
             filesInFsNotInMdb.extend(filesInFsNotInMdbPart)
-            filesWIthSameHashInFs.update(filesWIthSameHashInFsPart)
+            filesInFsInMdbWIthoutCOntentUnit.extend(filesInFsInMdbWIthoutCOntentUnitPart)
+            # filesAtFsWIthSameHashInFolderMap.update(filesAtFsWIthSameHashInFolderMapPart)
+            filesInOneFolderWIthSameHash.extend(filesInOneFolderWIthSameHashPart)
+            foldersWIthoutSignificantContentUnits.extend(foldersWIthoutSignificantContentUnitsPart)
+            foldersWIthMultipleSIgnificantContentUnits.extend(foldersWIthMultipleSIgnificantContentUnitsPart)
+            foldersWIthoutBeavodaPartInPath.extend(foldersWIthoutBeavodaPartInPathPart)
+            foldersWIthBeavodaPartButNotInMappingFile.extend(foldersWIthBeavodaPartButNotInMappingFilePart)
+            foldersWithWrongContentUnitSOurceMapping.extend(foldersWithWrongContentUnitSOurceMappingPart)
+
             fsFolderToFilesMap.clear()
 
-        filesInMdbNotInFs.extend(mdbSourceIdToContentUnitNameMap.items())
+        filesInMdbNotInFs.extend(mdbDataMap.items())
 
-        writeIterableToFile([("hash", "path", "size", "date")] + filesInFsNotInMdb, filesInFsNotInMdbFile)
-        writeIterableToFile([("hash", "fileId", "fileName", "fileSize", "contentUnitId", "contentTypeId")] + filesInMdbNotInFs, filesInMdbNotInFsFile)
         writeIterableToFile([("folderPath", "content_units")] + validFolders, validFoldersFile)
         writeIterableToFile([("folderPath", "errors")] + invalidFolders, invalidFoldersFile)
+        writeIterableToFile([("hash", "path", "size", "date")] + filesInFsNotInMdb, filesInFsNotInMdbFile)
+        writeIterableToFile([("hash", "fileId", "fileName", "fileSize", "contentUnitId", "contentTypeId")] + filesInMdbNotInFs, filesInMdbNotInFsFile)
+        writeIterableToFile([("hash", "filePath", "length", "date")] + filesInFsInMdbWIthoutCOntentUnit, filesInFsInMdbWIthoutCOntentUnitFile)
+
         writeIterableToFile([("hash", "fileId")] + list(filesWIthSameHashInMdb.items()), filesWIthSameHashInMdbFile)
-        writeIterableToFile([("folder", "(hash" , "firstFounded", "current)")] + list(filesWIthSameHashInFs.items()), filesWIthSameHashInFsFile)
-        writeIterableToFile([("fileId", "hash", "fileName")] + filesWithoutContentUnit, filesWithoutContentUnitFile)
-        printToFileAndConsole(os.path.join(analysisSummaryFolder, "summary_{}.txt".format(currentDate)),
+        # writeIterableToFile([("folder", "(hash" , "firstFounded", "current)")] + list(filesAtFsWIthSameHashInFolderMap.items()), filesWIthSameHashInFsFile)
+        writeIterableToFile([("hash", "folderPath", "firstFileName", "current")] + filesInOneFolderWIthSameHash, filesWIthSameHashInFsFile)
+        writeIterableToFile([("fileId", "hash", "fileName")] + filesEntriesWithoutContentUnitInMdb, filesWithoutContentUnitFile)
+
+
+        writeIterableToFile([("folderPath", "contentUnits")] + foldersWIthoutSignificantContentUnits, foldersWIthoutSignificantContentUnitsFile)
+        writeIterableToFile([("folderPath", "num of significant units", "significant units")] + foldersWIthMultipleSIgnificantContentUnits, foldersWIthMultipleSIgnificantContentUnitsFile)
+        writeIterableToFile([("folderPath", "contentUnits")] + foldersWIthoutBeavodaPartInPath, foldersWIthoutBeavodaPartInPathFile)
+        writeIterableToFile([("folderPath", "contentUnits")] + foldersWIthBeavodaPartButNotInMappingFile, foldersWIthBeavodaPartButNotInMappingFileFile)
+        writeIterableToFile([("folderPath", "significantCOntentUnitId", "sourceIdFromMappingFile", "sourceIdsBySignificantContentUnitId")] + foldersWithWrongContentUnitSOurceMapping, foldersWithWrongContentUnitSOurceMappingFile)
+        printToFileAndConsole(summaryFile,
                                   [
                                       "\n********\nSummary\n********",
                                       "Files in fs: {}".format(numFilesInIndex),
@@ -208,8 +280,8 @@ def main(args):
                                       "Files in fs not in mdb: {}".format(len(filesInFsNotInMdb)),
                                       "Files in mdb not in fs: {}".format(len(filesInMdbNotInFs)),
                                       "Num of \"duplicated\" (in one folder, several files with same hash) files in mdb: {}".format(len(filesWIthSameHashInMdb.items())),
-                                      "Num of \"duplicated\" files (by hash) in fs (compared only inside folders): {}".format(len(filesWIthSameHashInFs.items())),
-                                      "Num of 'valid' folders (one 'significant' content unit (not None and not KITEI_MAKOV)): {}".format(len(validFolders)),
+#                                      "Num of \"duplicated\" files (by hash) in fs (compared only inside folders): {}".format(len(filesAtFsWIthSameHashInFolderMap.items())),
+                                      "Num of 'valid' folders : {}\n\t*(one 'significant' content unit (not None and not KITEI_MAKOV)\n\t*in ____beavoda folder\n\t*entry in mapping file with not empty path\n\t*sourceId from mapping file IN folder's sourceIds (got by content_unit_id -> sourceIds mapping))".format(len(validFolders)),
                                       "Num of invalid folders: {}".format(len(invalidFolders))
                                   ]
                               )
