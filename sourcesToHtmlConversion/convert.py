@@ -9,16 +9,17 @@ import argparse
 import datetime
 import tempfile
 
-#import logging
-#from multiprocessing_logging import install_mp_handler # for logging from multiprocessing.pool processes
+# import logging
+# from multiprocessing_logging import install_mp_handler # for logging from multiprocessing.pool processes
 
 # DB
 import psycopg2
 
 # conversionFunctions.py
-import conversionFunctions
+from sourcesToHtmlConversion import conversion_functions
 # fileUtils.py
-from fileUtils import printIterableToFile, normalizeFilePath
+from sourcesToHtmlConversion.file_utils import printIterableToFile, normalizeFilePath
+
 
 def getLangFromFileName(filename):
     fileNameParts = filename.split('_')
@@ -35,38 +36,40 @@ def getLangFromFileName(filename):
 
 
 def main(args):
-    parser = argparse.ArgumentParser(description='Convertion doc -> docx -> cleaned html + mbId -> uid directory structure. Works with a copy of source folder', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('srcFolderPath', action="store", help="Root folder (copy to destfolder and then copied_folder is processed)")
-    parser.add_argument('-destFolderPath', action="store", default=".", help="Dest folder")
-    parser.add_argument('-langMapFilePath', default="./langMap.json", action="store", help="postgres connection params")
-    parser.add_argument('-postgresqlOptFilePath', default="./postgresqlOpt.json", action="store", help="postgres connection params as json")
-    parser.add_argument('-tidyOptionsFilePath', default="./tidyOptions.json", action="store", help="options for tidy (html -> cleaned html) as json")
-    results = parser.parse_args(args)
+    parser = argparse.ArgumentParser(
+        description='Convertion doc -> docx -> cleaned html + mbId -> uid directory structure. Works with a copy of source folder',
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-    srcFolderPath = normalizeFilePath(results.srcFolderPath)
-    destFolderPath = normalizeFilePath(results.destFolderPath)
-    langMapFilePath = normalizeFilePath(results.langMapFilePath)
-    postgresqlOptFilePath = normalizeFilePath(results.postgresqlOptFilePath)
-    tidyOptionsFilePath = normalizeFilePath(results.tidyOptionsFilePath)
+    parser.add_argument('src', action="store",
+                        help="Root folder (copy to destfolder and then copied_folder is processed)")
+    parser.add_argument('-work_dir', action="store", default="./conversion", help="working directory")
 
-    # if we need rename result files with special suffixes like '_pandoc.html' etc
-    indexJsonFileName = "index.json"
+    params = parser.parse_args(args)
+
+    src = normalizeFilePath(params.src)
+    work_dir = normalizeFilePath(params.work_dir)
+
+    print("""Convert stage params: 
+           \tsrc={}
+           \twork_dir={}"""
+          .format(src, work_dir))
 
     # for future logging usage
     # logging.basicConfig(level=logging.DEBUG, format='%(asctime)s [p:(%(processName)s)] %(levelname)s - %(message)s')
     # install_mp_handler()
 
-    with open(langMapFilePath) as langMap_json:
-        langMap = json.load(langMap_json)
+    with open(os.path.join(work_dir, 'languages.json')) as f:
+        lang_map = json.load(f)
 
-
-    with open(tidyOptionsFilePath) as tidyOptions_json:
-        tidyOptions = json.load(tidyOptions_json)
+    with open(os.path.join(work_dir, 'tidy.json')) as f:
+        tidy_conf = json.load(f)
+        print("tidy_conf:", tidy_conf)
 
     # Connect to mdb
-    with open(postgresqlOptFilePath) as postgresqlOpt_json:
-        postgresqlOpt = json.load(postgresqlOpt_json)
-    connection = psycopg2.connect(host=postgresqlOpt["host"], dbname=postgresqlOpt["dbname"], user=postgresqlOpt["user"], password=postgresqlOpt["password"])
+    with open(os.path.join(work_dir, 'mdb.json')) as f:
+        mdb_conf = json.load(f)
+    connection = psycopg2.connect(**mdb_conf)
+
     # Open a cursor to perform database operations
     cur = connection.cursor()
     cur.execute("select id, uid from sources;")
@@ -74,19 +77,19 @@ def main(args):
     cur.close()
     connection.close()
 
-    #result of analisys folder
-    convertingSummaryFolder = os.path.join(destFolderPath, 'convertingSummary')
-    os.makedirs(convertingSummaryFolder, exist_ok=True)
+    # result of analisys folder
+    converting_summary_folder = os.path.join(work_dir, 'convertingSummary')
+    os.makedirs(converting_summary_folder, exist_ok=True)
 
     # working on copy (!!!clear previous one!!!)
-    convertedFolder = os.path.join(destFolderPath, 'converted')
-    if (os.path.exists(convertedFolder)):
-        print("\tDelete previous working folder...")
-        shutil.rmtree(convertedFolder)
-    print("\tCopy organized sources to working folder...")
-    shutil.copytree(srcFolderPath, convertedFolder)
-    srcFolderPath = convertedFolder
+    converted_folder = os.path.join(work_dir, 'converted')
+    if os.path.exists(converted_folder):
+        print("Cleaning converted folder")
+        shutil.rmtree(converted_folder)
 
+    print("\tCopy organized sources to working folder...")
+    shutil.copytree(src, converted_folder)
+    src = converted_folder
 
     # soffice does not allow  more than 1 conversion at time (otherwise it hangs)
     def setConvertToDocxProcessName(name):
@@ -97,12 +100,14 @@ def main(args):
 
     # pandoc and tidy allow parallel conversions
     procCount = 1
+
     def setConvertToHtmlProcessName(name, procCount):
         multiprocessing.current_process().name = name + str(procCount)
         procCount += 1
         return
 
-    pandocpool = multiprocessing.Pool(multiprocessing.cpu_count(), initializer=setConvertToHtmlProcessName, initargs=["pandoc_with_tidy", procCount])
+    pandocpool = multiprocessing.Pool(multiprocessing.cpu_count(), initializer=setConvertToHtmlProcessName,
+                                      initargs=["pandoc_with_tidy", procCount])
 
     convertFromDocToDocxBatchPaths = []
     convertFromDocxToHtmlTasks = []
@@ -119,41 +124,44 @@ def main(args):
     with tempfile.TemporaryDirectory() as tmpdirname:
         print('\tCreate temp directory {}'.format(tmpdirname))
 
-        allSourcesFolders = os.listdir(srcFolderPath)
-        directoriesToProcessBatchSize = 50 # ~150 directories at once
+        allSourcesFolders = os.listdir(src)
+        directoriesToProcessBatchSize = 50  # ~150 directories at once
 
         convertingDocFileNameToDirName = {}
         outerRangeUpBorder = len(allSourcesFolders) // directoriesToProcessBatchSize
-        outerRangeUpBorder = outerRangeUpBorder if (len(allSourcesFolders) % directoriesToProcessBatchSize == 0) else outerRangeUpBorder + 1
+        outerRangeUpBorder = outerRangeUpBorder if (
+                len(allSourcesFolders) % directoriesToProcessBatchSize == 0) else outerRangeUpBorder + 1
         # range(INCLUSIVE, EXCLUSIVE)
         for i in range(0, outerRangeUpBorder):
             # convertion doc -> docx
-            innerRangeDownBorder = i*directoriesToProcessBatchSize
-            innerRangeUpBorder = min(len(allSourcesFolders), (i+1)*directoriesToProcessBatchSize)
+            innerRangeDownBorder = i * directoriesToProcessBatchSize
+            innerRangeUpBorder = min(len(allSourcesFolders), (i + 1) * directoriesToProcessBatchSize)
 
             for j in range(innerRangeDownBorder, innerRangeUpBorder):
                 dirName = allSourcesFolders[j]
-                dirPath = normalizeFilePath(os.path.join(srcFolderPath, dirName))
+                dirPath = normalizeFilePath(os.path.join(src, dirName))
                 convertDocsInPath = False
                 if (os.path.isdir(dirPath)):  # self check
                     sourcesCounter += 1
-                    print("\tConverting #{}({}) at folder (mbId='{}')".format(sourcesCounter, len(allSourcesFolders), dirName))
+                    print("\tConverting #{}({}) at folder (mbId='{}')".format(sourcesCounter, len(allSourcesFolders),
+                                                                              dirName))
                     for filename in fnmatch.filter(os.listdir(dirPath), "*.doc"):
                         convertDocsInPath = True
-                        if(filename in (convertingDocFileNameToDirName.keys())):
+                        if (filename in (convertingDocFileNameToDirName.keys())):
                             tmpFileName = dirPath + os.sep + 'TMP_NAME_' + dirName + '_' + filename
                             os.rename(dirPath + os.sep + filename, tmpFileName)
                             convertingDocFileNameToDirName[os.path.splitext(tmpFileName)[0]] = dirPath
                         else:
                             convertingDocFileNameToDirName[os.path.splitext(filename)[0]] = dirPath
                         allConvertedToDocsDocs.append((dirPath + os.path.sep + filename))
-                    if(convertDocsInPath):
+                    if (convertDocsInPath):
                         # convertFromDocToDocx(workingPaths)
                         convertFromDocToDocxBatchPaths.append(dirPath)
 
             if (len(convertFromDocToDocxBatchPaths) > 0):
                 # convertFromDocToDocx(inputPaths, outputPath, filenameToFolderMap, sofficeErrors)
-                sofficepool.apply_async(conversionFunctions.convertFromDocToDocx, (convertFromDocToDocxBatchPaths, tmpdirname, convertingDocFileNameToDirName, sofficeErrors)).get()
+                sofficepool.apply_async(conversion_functions.convertFromDocToDocx, (
+                    convertFromDocToDocxBatchPaths, tmpdirname, convertingDocFileNameToDirName, sofficeErrors)).get()
                 convertedDocToDocxPathsCounter += len(convertFromDocToDocxBatchPaths)
                 convertFromDocToDocxBatchPaths.clear()
                 convertingDocFileNameToDirName.clear()
@@ -161,17 +169,22 @@ def main(args):
             # convertion docx -> html -> cleaned html
             for j in range(innerRangeDownBorder, innerRangeUpBorder):
                 dirName = allSourcesFolders[j]
-                dirPath = normalizeFilePath(os.path.join(srcFolderPath, dirName))
+                dirPath = normalizeFilePath(os.path.join(src, dirName))
                 for filename in fnmatch.filter(os.listdir(dirPath), "*.docx"):
                     if (os.path.exists(os.path.join(dirPath, os.path.splitext(filename)[0] + ".html"))):
                         continue
                     else:
                         # convertFromDocxToHtml(sourcepath, destpath, tidyOpt, tidyErrors)
-                        convertFromDocxToHtmlTasks.append((os.path.join(dirPath, filename), os.path.join(dirPath, os.path.splitext(filename)[0] + ".html"), tidyOptions, tidyErrors))
+                        convertFromDocxToHtmlTasks.append((
+                            os.path.join(dirPath, filename),
+                            os.path.join(dirPath, os.path.splitext(filename)[0] + ".html"),
+                            tidy_conf,
+                            tidyErrors))
 
             if (len(convertFromDocxToHtmlTasks) > 0):
-                results = [pandocpool.apply_async(conversionFunctions.convertFromDocxToHtml, t) for t in convertFromDocxToHtmlTasks]
-                for result in results:
+                params = [pandocpool.apply_async(conversion_functions.convertFromDocxToHtml, t) for t in
+                          convertFromDocxToHtmlTasks]
+                for result in params:
                     result.get()
                 convertedDocxToHtmlCounter += len(convertFromDocxToHtmlTasks)
                 convertFromDocxToHtmlTasks.clear()
@@ -179,11 +192,11 @@ def main(args):
             # create index.json with lang->doc map
             for j in range(innerRangeDownBorder, innerRangeUpBorder):
                 dirName = allSourcesFolders[j]
-                dirPath = normalizeFilePath(os.path.join(srcFolderPath, dirName))
+                dirPath = normalizeFilePath(os.path.join(src, dirName))
                 langToDocsMap = {}
                 for filename in os.listdir(dirPath):
                     # return (lang, newDocFormat)
-                    lang2letter = langMap.get(getLangFromFileName(filename)[0].upper(), False)
+                    lang2letter = lang_map.get(getLangFromFileName(filename)[0].upper(), False)
                     if (not lang2letter):
                         print("\t\tSkip filename with unrecognized lang: {}".format(filename))
                         fileNamesWithUnrecognizedLangs.append((dirPath + os.path.sep + filename))
@@ -192,7 +205,7 @@ def main(args):
                         langToDocsMap[lang2letter] = {}
                     langToDocsMap[lang2letter][os.path.splitext(filename)[1][1:]] = filename
                 indexjson = json.dumps(langToDocsMap, indent=4)
-                with open(dirPath + os.path.sep + indexJsonFileName, 'w') as myfile:
+                with open(dirPath + os.path.sep + "index.json", 'w') as myfile:
                     myfile.write(indexjson)
 
                 # rename folders
@@ -208,17 +221,27 @@ def main(args):
                     print("\t\tUnrecognized mbId: {}".format(dirName))
                     unrecognizedFolderNames.append(mbId)
                 else:
-                    print("\t\tRename {}\n\t\t\tto {}".format(srcFolderPath + os.path.sep + dirName, srcFolderPath + os.path.sep + uid))
-                    os.rename(srcFolderPath + os.path.sep + dirName, srcFolderPath + os.path.sep + uid)
+                    print("\t\tRename {}\n\t\t\tto {}".format(src + os.path.sep + dirName,
+                                                              src + os.path.sep + uid))
+                    os.rename(src + os.path.sep + dirName, src + os.path.sep + uid)
 
         currentDate = str(datetime.datetime.now()).replace(' ', '_');
 
-        print("\ttmpFolder: {}, Batch size: {}\nNum of doc->docx (soffice) folders conversioned: {}\nNum of docx->html (pandoc + tidy) conversions: {}".format(tmpdirname, directoriesToProcessBatchSize, convertedDocToDocxPathsCounter, convertedDocxToHtmlCounter))
-        printIterableToFile(os.path.join(destFolderPath, convertingSummaryFolder, 'allConvertedDocs_{}.txt'.format(currentDate)), allConvertedToDocsDocs)
-        printIterableToFile(os.path.join(destFolderPath, convertingSummaryFolder, 'fileNamesWithUnrecognizedLangs_{}.txt'.format(currentDate)), fileNamesWithUnrecognizedLangs)
-        printIterableToFile(os.path.join(destFolderPath, convertingSummaryFolder, 'unrecognizedFolderNames_{}.txt'.format(currentDate)), unrecognizedFolderNames)
-        printIterableToFile(os.path.join(destFolderPath, convertingSummaryFolder, 'idUidMap_{}.txt'.format(currentDate)), idUidMap)
-        #to end "iter" call below
+        print(
+            "\ttmpFolder: {}, Batch size: {}\nNum of doc->docx (soffice) folders conversioned: {}\nNum of docx->html (pandoc + tidy) conversions: {}".format(
+                tmpdirname, directoriesToProcessBatchSize, convertedDocToDocxPathsCounter, convertedDocxToHtmlCounter))
+        printIterableToFile(
+            os.path.join(converting_summary_folder, 'allConvertedDocs_{}.txt'.format(currentDate)),
+            allConvertedToDocsDocs)
+        printIterableToFile(os.path.join(converting_summary_folder,
+                                         'fileNamesWithUnrecognizedLangs_{}.txt'.format(currentDate)),
+                            fileNamesWithUnrecognizedLangs)
+        printIterableToFile(
+            os.path.join(converting_summary_folder, 'unrecognizedFolderNames_{}.txt'.format(currentDate)),
+            unrecognizedFolderNames)
+        printIterableToFile(
+            os.path.join(converting_summary_folder, 'idUidMap_{}.txt'.format(currentDate)), idUidMap)
+        # to end "iter" call below
         tidyErrors.put(None)
         sofficeErrors.put(None)
 
@@ -228,9 +251,12 @@ def main(args):
                 listFromQueue.append(i)
             return listFromQueue
 
-        printIterableToFile(os.path.join(destFolderPath, convertingSummaryFolder, 'tidyErrors_{}.txt'.format(currentDate)), [("workingPath", "errors")] + multiprocessingQueueToList(tidyErrors))
-        printIterableToFile(os.path.join(destFolderPath, convertingSummaryFolder, 'sofficeErrors_{}.txt'.format(currentDate)), [("cmd", "workingPath", "errors")] + multiprocessingQueueToList(sofficeErrors))
-
+        printIterableToFile(
+            os.path.join(converting_summary_folder, 'tidyErrors_{}.txt'.format(currentDate)),
+            [("workingPath", "errors")] + multiprocessingQueueToList(tidyErrors))
+        printIterableToFile(
+            os.path.join(converting_summary_folder, 'sofficeErrors_{}.txt'.format(currentDate)),
+            [("cmd", "workingPath", "errors")] + multiprocessingQueueToList(sofficeErrors))
 
 
 if __name__ == "__main__":
