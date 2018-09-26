@@ -18,7 +18,7 @@ def main(args):
     parser.add_argument('src', action="store", help="Source folder")
     parser.add_argument('dest', action="store", help="Dest folder (with ____beavoda part)")
     parser.add_argument('-work_dir', action="store", default="./conversion", help="working directory")
-    parser.add_argument('-p', action="append", dest='patterns', default=['*.doc', '*.docx'],
+    parser.add_argument('-p', action="append", dest='patterns', default=['*.doc', '*.docx', '*.pdf'],
                         help="Extension patterns for src_path docs")
     parser.add_argument('--clean', action="store_true", default=False, help="Clean dest src before")
 
@@ -39,6 +39,9 @@ def main(args):
 
     copied_files = []
     skipped_files = []
+
+    copied = 0
+    skipped = 0
 
     if params.clean and os.path.exists(dest):
         print("Cleaning dest folder")
@@ -68,22 +71,24 @@ def main(args):
 
                     if skip:
                         # print("File already exists. Skipped: '%s'" % dest_path)
-                        skipped_files.append((src_path, dest_path))
+                        skipped_files.append(dest_path)
+                        skipped += 1
                     else:
-                        # print("copy from: '%s'\n\tto: '%s'" % (src_path, dest_path))
+                        print("copy new file: '%s'" % src_path)
                         shutil.copyfile(src_path, dest_path)
-                        copied_files.append((src_path, dest_path))
+                        copied += 1
+                        copied_files.append(dest_path)
                 except OSError as err:
                     print(err)
 
-    print("CopiedFiles: {}, skipped_files: {}".format(len(copied_files), len(skipped_files)))
+    print("CopiedFiles: {}, skipped_files: {}".format(copied, skipped))
     current_date = str(datetime.datetime.now()).replace(' ', '_')
     file_utils.printIterableToFile(
         os.path.join(work_dir, "copiedFiles_{}.txt".format(current_date)),
-        ["from", "to"] + copied_files)
+        copied_files)
     file_utils.printIterableToFile(
         os.path.join(work_dir, "skippedFiles_{}.txt".format(current_date)),
-        ["from", "to"] + skipped_files)
+        skipped_files)
 
 
 if __name__ == '__main__':

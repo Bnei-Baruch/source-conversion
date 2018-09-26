@@ -3,13 +3,14 @@ import json
 import os
 import subprocess
 import shutil
+import tempfile
+import zipfile
 
-# pip install pypandoc
 import pypandoc
-
-# pip install pytidylib
 import tidylib
 
+from lxml import etree
+from lxml.html.clean import Cleaner
 
 # inputPaths - folders woth doc files
 # outputPath - docx results folder
@@ -45,7 +46,16 @@ def convertFromDocToDocx(inputPaths, outputPath, filenameToFolderMap, sofficeErr
     return
 
 
+html_cleaner = Cleaner(kill_tags=['img'])
+
+
 def convertFromDocxToHtml(src, dest, tidy_options, tidy_errors):
+    # print("\t\tfix docx smartTag src:{}".format(src))
+    # try:
+    #     fix_smarttags_in_docx(src)
+    # except Exception as ex:
+    #     print("\t\t\tError fixing docx src:{}, error:".format(src, ex))
+
     print("\t\tStart docx->html convertion (pandoc) src:{}, dest:{}".format(src, dest))
     try:
         pypandoc.convert_file(src, to='html5', extra_args=['-s'], outputfile=dest)
@@ -54,9 +64,9 @@ def convertFromDocxToHtml(src, dest, tidy_options, tidy_errors):
     except OSError:
         print("\t\t\tpandoc wasn't found !!! please install first")
         raise RuntimeError("pandoc is not installed")
-    else:
-        print(
-            "\t\t\tDone converting from docx to html (pandoc) src:{}, dest:{}".format(src, dest))
+    # else:
+    #     print(
+    #         "\t\t\tDone converting from docx to html (pandoc) src:{}, dest:{}".format(src, dest))
 
     print("\t\tStart to tidy html. Input file '{}'".format(dest))
     with open(dest, 'r') as f:
@@ -67,22 +77,62 @@ def convertFromDocxToHtml(src, dest, tidy_options, tidy_errors):
         tidy_errors.put((dest, str(errors)))
     else:
         with open(dest, 'w') as f:
-            f.write(markup)
+            f.write(html_cleaner.clean_html(markup))
     print("\t\t\tDone to tidy html file '{}'. Errors: {}".format(dest, errors))
 
     return
 
 
+xslt_root = etree.XML('''
+    <xsl:stylesheet
+            xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+            xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+            version="1.0">
+        <xsl:output method="xml" version="1.0" encoding="UTF-8" standalone="yes"/>
+        <xsl:template match="@* | node()" name="identity">
+            <xsl:copy>
+                <xsl:apply-templates select="@* | node()"/>
+            </xsl:copy>
+        </xsl:template>
+        <xsl:template match="w:smartTag">
+            <w:r><w:t><xsl:value-of select="." /></w:t></w:r>
+        </xsl:template>
+    </xsl:stylesheet>
+            ''')
+transform = etree.XSLT(xslt_root)
+
+
+def zipdir(path, ziph):
+    for root, dirs, files in os.walk(path):
+        for fn in files:
+            absfn = os.path.join(root, fn)
+            zfn = absfn[len(path) + len(os.sep):]  # XXX: relative path
+            ziph.write(absfn, zfn)
+
+
+def fix_smarttags_in_docx(src):
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        with zipfile.ZipFile(src) as zf:
+            zf.extractall(path=tmp_dir)
+
+        doc_xml = os.path.join(tmp_dir, 'word', 'document.xml')
+        doc = etree.parse(doc_xml)
+        result_tree = transform(doc)
+        result_tree.write_output(doc_xml)
+
+        zipf = zipfile.ZipFile(src, 'w', zipfile.ZIP_DEFLATED)
+        zipdir(tmp_dir, zipf)
+        zipf.close()
+
+
 if __name__ == '__main__':
+    # fix_smarttags_in_docx(
+    #     '/home/edos/projects/source-conversion/conversion/converted/TarnTofh/copy_633_eng_t_bs-159-ve-yehi-ba-yamim.docx')
     files = [
-        'ukr_text_1984-01-2-matarat-hevra-2_rabash',
-        '0012_rus_t_rb-984-01-2-matarat-hevra-2',
-        '0012_heb_o_rb-1984-01-2-matarat-hevra-2',
-        '0012_eng_t_rb-1984-01-2-matarat-hevra-2',
-        'fre_t_rb-1984-17-matarat-hevra-2'
+        'rus_t_bs-tes-06_or-pnimi',
     ]
 
-    base_dir = '/home/edos/projects/source-conversion/conversion/converted/he3tEpLu/'
+    base_dir = '/home/edos/projects/source-conversion/conversion/tes/original/'
     with open('/home/edos/projects/source-conversion/conversion/tidy.json') as f:
         tidy_conf = json.load(f)
 

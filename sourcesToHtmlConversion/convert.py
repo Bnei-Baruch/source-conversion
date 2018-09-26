@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 import fnmatch
 import os
+import re
 import sys
 import multiprocessing
 import shutil
@@ -15,24 +16,30 @@ import tempfile
 # DB
 import psycopg2
 
-# conversionFunctions.py
 from sourcesToHtmlConversion import conversion_functions
-# fileUtils.py
 from sourcesToHtmlConversion.file_utils import printIterableToFile, normalizeFilePath
 
+RE_NUM_DASH = re.compile('[0-9\-]')
 
-def getLangFromFileName(filename):
-    fileNameParts = filename.split('_')
-    # some new files started wih page number (____beavoda/80_rabash/mekorot/02_igrot/1424_rb-igeret-03/1424_heb_o_rb-igeret-03.docx)
-    # this files = well formated, so we prefer to get them
-    langIndex = 0
-    try:
-        int(fileNameParts[langIndex])
-        langIndex = 1
-    except ValueError:
-        langIndex = 0
-    lang = fileNameParts[langIndex]
-    return (lang, True if langIndex == 1 else False)
+
+def lang_from_file_name(filename):
+    """
+    >>> lang_from_file_name('lang_some_name')
+    ('lang', False)
+    >>> lang_from_file_name('some_name')
+    ('some', False)
+    >>> lang_from_file_name('123_lang_some_name')
+    ('lang', True)
+    >>> lang_from_file_name('01-1_lang_some_name')
+    ('lang', True)
+    """
+
+    parts = filename.split('_')
+    # some new files started wih some number 1424_heb_o_rb-igeret-03.docx
+    # this files = well formatted, so we prefer to get them
+    idx = 1 if RE_NUM_DASH.match(parts[0]) else 0
+    lang = parts[idx]
+    return lang, True if idx == 1 else False
 
 
 def main(args):
@@ -77,7 +84,7 @@ def main(args):
     cur.close()
     connection.close()
 
-    # result of analisys folder
+    # result of analysis folder
     converting_summary_folder = os.path.join(work_dir, 'convertingSummary')
     os.makedirs(converting_summary_folder, exist_ok=True)
 
@@ -196,28 +203,28 @@ def main(args):
                 langToDocsMap = {}
                 for filename in os.listdir(dirPath):
                     # return (lang, newDocFormat)
-                    lang2letter = lang_map.get(getLangFromFileName(filename)[0].upper(), False)
-                    if (not lang2letter):
+                    lang2letter = lang_map.get(lang_from_file_name(filename)[0].upper(), False)
+                    if not lang2letter:
                         print("\t\tSkip filename with unrecognized lang: {}".format(filename))
                         fileNamesWithUnrecognizedLangs.append((dirPath + os.path.sep + filename))
                         continue
-                    if (lang2letter not in langToDocsMap):
+                    if lang2letter not in langToDocsMap:
                         langToDocsMap[lang2letter] = {}
                     langToDocsMap[lang2letter][os.path.splitext(filename)[1][1:]] = filename
-                indexjson = json.dumps(langToDocsMap, indent=4)
-                with open(dirPath + os.path.sep + "index.json", 'w') as myfile:
-                    myfile.write(indexjson)
+
+                with open(os.path.join(dirPath, "index.json"), 'w') as f:
+                    f.write(json.dumps(langToDocsMap, indent=2))
 
                 # rename folders
                 try:
                     mbId = int(dirName)
-                except ValueError as err:
+                except ValueError:
                     print("\t\tUnrecognized mbId: {}".format(dirName))
                     unrecognizedFolderNames.append(dirName)
                     continue
 
                 uid = idUidMap.get(mbId)
-                if (not uid):
+                if not uid:
                     print("\t\tUnrecognized mbId: {}".format(dirName))
                     unrecognizedFolderNames.append(mbId)
                 else:
@@ -225,7 +232,7 @@ def main(args):
                                                               src + os.path.sep + uid))
                     os.rename(src + os.path.sep + dirName, src + os.path.sep + uid)
 
-        currentDate = str(datetime.datetime.now()).replace(' ', '_');
+        currentDate = str(datetime.datetime.now()).replace(' ', '_')
 
         print(
             "\ttmpFolder: {}, Batch size: {}\nNum of doc->docx (soffice) folders conversioned: {}\nNum of docx->html (pandoc + tidy) conversions: {}".format(

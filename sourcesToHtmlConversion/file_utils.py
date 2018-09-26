@@ -8,8 +8,9 @@ import json
 # for example ('/run/media/dalegur/DATA/Documents/BB_MDB/Mapping/docs_copy/____beavoda\\70_baal-sulam\\mekorot\\akdamot\\akdama-pticha'
 # will not be recognized as valid path  (so path will no be found)
 def normalizeFilePath(filePath):
-    if (filePath == ""):
+    if filePath == "":
         return filePath
+
     return os.path.abspath(filePath).replace("\\", "/")
 
 
@@ -57,10 +58,6 @@ def calculatesha1(filePath):
 
 def printIterableToFile(filepath, iterable):
     """Every entry at new line"""
-    with open(filepath, 'w', encoding='UTF8') as currentFile:
-        currentFile.write(json.dumps(iterable, indent=4))
-
-        # for item in iterable:
-        #    currentFile.write(str(item))
-        #    currentFile.write('\n')
+    with open(filepath, 'w', encoding='utf8') as f:
+        f.write(json.dumps(iterable, indent=2, ensure_ascii=False))
     return

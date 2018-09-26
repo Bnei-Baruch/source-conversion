@@ -9,15 +9,14 @@ import datetime
 import shutil
 import json
 
+import pyexcel
+
 # fileUtils.py
 from sourcesToHtmlConversion.file_utils import \
     calculatesha1, \
     printToFileAndConsole, \
     printIterableToFile, \
     normalizeFilePath
-
-# pip install pyexcel
-import pyexcel as p
 
 
 def main(args):
@@ -28,7 +27,7 @@ def main(args):
     parser.add_argument('-work_dir', action="store", default="./conversion", help="working directory")
     parser.add_argument('-p', action="append", dest='patterns', default=['*.doc', '*.docx'],
                         help="Extension patterns for source docs")
-    parser.add_argument('--clean', action="store_true", default=False,
+    parser.add_argument('--clean', action="store_true", default=True,
                         help="Clean work_dir/organized before")
 
     params = parser.parse_args(args)
@@ -58,7 +57,8 @@ def main(args):
         shutil.rmtree(organized_folder_path)
 
     # get data from mapping file, skip headers
-    sheet = p.get_sheet(file_name=(os.path.join(work_dir, 'mapping.xlsx')), name_columns_by_row=0)
+    sheet = pyexcel.get_sheet(file_name=(os.path.join(work_dir, 'mapping.xlsx')),
+                              name_columns_by_row=0, encoding="utf-8")
 
     patternsToDocCount = {}
     for pattern in patterns:
@@ -98,9 +98,11 @@ def main(args):
     for row in sheet:
         rowsCounter += 1
         print("Process {}({}) row".format(rowsCounter, sheet.number_of_rows()))
-        if (row[0] == ""):
+
+        if row[0] == "":
             print("Row {} skipped because of empty mbId. Row's content: {}".format(rowsCounter, row))
             continue
+
         mbId = str(int(row[0]))
         name = row[1]
         path = row[2]
@@ -133,22 +135,22 @@ def main(args):
                         continue
                     elif ("_im-nikud." in filename):
                         print(
-                            "\t\t\tdoc #{}, file {}({}) with name '{}': skipped because marked as SCAN".format(
+                            "\t\t\tdoc #{}, file {}({}) with name '{}': skipped because marked as NIKUD".format(
                                 analyzedDocsCounter, analyzedFilesInFolderCounterByPattern,
                                 len(fileNamesMatchedPattern),
                                 filename))
                         # (mbId, relativePath, description)
-                        docsRecognizedAndSkippedByFileName.append((mbId, analyzedFileRelativePath, 'SCAN doc skipped'))
+                        docsRecognizedAndSkippedByFileName.append((mbId, analyzedFileRelativePath, 'NIKUD doc skipped'))
                         continue
-                    elif ("_full." in filename):
-                        print(
-                            "\t\t\tdoc #{}, file {}({}) with name '{}': skipped because marked as SCAN".format(
-                                analyzedDocsCounter, analyzedFilesInFolderCounterByPattern,
-                                len(fileNamesMatchedPattern),
-                                filename))
-                        # (mbId, relativePath, description)
-                        docsRecognizedAndSkippedByFileName.append((mbId, analyzedFileRelativePath, 'SCAN doc skipped'))
-                        continue
+                    # elif ("_full." in filename):
+                    #     print(
+                    #         "\t\t\tdoc #{}, file {}({}) with name '{}': skipped because marked as FULL".format(
+                    #             analyzedDocsCounter, analyzedFilesInFolderCounterByPattern,
+                    #             len(fileNamesMatchedPattern),
+                    #             filename))
+                    #     # (mbId, relativePath, description)
+                    #     docsRecognizedAndSkippedByFileName.append((mbId, analyzedFileRelativePath, 'FULL doc skipped'))
+                    #     continue
                     elif ("_scan." in filename):
                         print(
                             "\t\t\tdoc #{}, file {}({}) with name '{}': skipped because marked as SCAN".format(
@@ -175,14 +177,14 @@ def main(args):
                         # (mbId, relativePath, description)
                         docsRecognizedAndSkippedByFileName.append((mbId, analyzedFileRelativePath, 'HELKI doc skipped'))
                         continue
-                    elif ("_old.." in filename):
-                        print("\t\t\tdoc #{}, file {}({}) with name '{}': skipped because marked as HELKI".format(
-                            analyzedDocsCounter, analyzedFilesInFolderCounterByPattern,
-                            len(fileNamesMatchedPattern),
-                            filename))
-                        # (mbId, relativePath, description)
-                        docsRecognizedAndSkippedByFileName.append((mbId, analyzedFileRelativePath, 'HELKI doc skipped'))
-                        continue
+                    # elif ("_old.." in filename):
+                    #     print("\t\t\tdoc #{}, file {}({}) with name '{}': skipped because marked as OLD".format(
+                    #         analyzedDocsCounter, analyzedFilesInFolderCounterByPattern,
+                    #         len(fileNamesMatchedPattern),
+                    #         filename))
+                    #     # (mbId, relativePath, description)
+                    #     docsRecognizedAndSkippedByFileName.append((mbId, analyzedFileRelativePath, 'OLD doc skipped'))
+                    #     continue
 
                     fileNameParts = filename.split('_')
 
@@ -288,7 +290,7 @@ def main(args):
                             originalFileNamesRecognitionProblems.append((mbId, lang, type, analyzedFileRelativePath,
                                                                          "Multiple 'original' files for lang (DUPLICATED)"))
 
-            if (not work_dir == "" and len(originalSourceDocsByLang.keys()) > 0):
+            if not work_dir == "" and len(originalSourceDocsByLang.keys()) > 0:
                 folderToCopy = os.path.join(organized_folder_path, mbId)
                 os.makedirs(folderToCopy, exist_ok=True)
                 for docLang in list(originalSourceDocsByLang.keys()):
@@ -300,7 +302,7 @@ def main(args):
                     copiedDocsCounter += 1
                     print("\t\t\tCopy #{} success.".format(docCounter))
 
-            if (len(langsBySource.keys()) == 0):
+            if len(langsBySource.keys()) == 0:
                 if (analyzedFilesInFolderCounterByPattern == 0):
                     warnings.append((mbId, sourceFolder, "No doc files for source at path"))
                 else:
@@ -315,7 +317,7 @@ def main(args):
                 validSources.append((mbId, langsBySource))
         else:
             print("\tRow {} skipped because of empty path field. Row's content: {}".format(rowsCounter, row))
-            warnings.append((mbId, "", "Path field in mapping file is empty"))
+            warnings.append((mbId, name, "Path field in mapping file is empty"))
 
     linesOfSummaryToPrint = []
     linesOfSummaryToPrint.append(
