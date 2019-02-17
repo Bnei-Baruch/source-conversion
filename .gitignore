@@ -16,6 +16,6 @@ conversion/
 analysisSummary/
 convertingSummary/
 
-*.txt
+
 *.tar.xz
 *.log

@@ -7,6 +7,8 @@ import fnmatch
 import argparse
 import datetime
 
+import pyfastcopy # Can be removed once on python 3.8
+
 # fileUtils.py
 from sourcesToHtmlConversion import file_utils
 
