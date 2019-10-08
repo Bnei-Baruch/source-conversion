@@ -126,13 +126,11 @@ def fix_smarttags_in_docx(src):
 
 
 if __name__ == '__main__':
-    # fix_smarttags_in_docx(
-    #     '/home/edos/projects/source-conversion/conversion/converted/TarnTofh/copy_633_eng_t_bs-159-ve-yehi-ba-yamim.docx')
     files = [
-        'rus_t_bs-tes-06_or-pnimi',
+        'eng_pticha',
     ]
 
-    base_dir = '/home/edos/projects/source-conversion/conversion/tes/original/'
+    base_dir = '/tmp/'
     with open('/home/edos/projects/source-conversion/conversion/tidy.json') as f:
         tidy_conf = json.load(f)
 

@@ -4,10 +4,7 @@ import sys
 import os
 import argparse
 
-from sourcesToHtmlConversion import \
-    copy_files, \
-    organize, \
-    convert
+from sourcesToHtmlConversion import copy_files, organize, convert, converted_analysis
 
 from sourcesToHtmlConversion.file_utils import normalizeFilePath
 
@@ -32,6 +29,7 @@ def main(args):
     parser.add_argument('--skipCopy', action="store_true", default=False, help="Skip copy stage")
     parser.add_argument('--skipOrganize', action="store_true", default=False, help="Skip organize stage")
     parser.add_argument('--skipConvert', action="store_true", default=False, help="Skip convert stage")
+    parser.add_argument('--skipCompare', action="store_true", default=False, help="Skip compare stage")
 
     params = parser.parse_args(args)
 
@@ -77,6 +75,12 @@ def main(args):
         convert.main([os.path.join(work_dir, 'organized'), "-work_dir", work_dir])
     else:
         print("Skip convert stage")
+
+    # Compare
+    if not params.skipCompare:
+        converted_analysis.main(["-work_dir", work_dir])
+    else:
+        print("Skip compare stage")
 
 
 if __name__ == '__main__':
